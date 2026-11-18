@@ -129,7 +129,16 @@ function grantingParents(e){
  const refs=reverse.get(G.Namespace+':'+e.obj.Id)||[];
  return [...new Set(refs.filter(r=>r.key!==e.key&&(ownerFields[e.type]?.test(r.path)||(/Effect$/.test(e.type)&&/CombatEffect|\.Effect$|\.Effects\[/.test(r.path)))).map(r=>r.key))].map(k=>byKey.get(k));
 }
-function gateText(e){const o=e.obj;return [o.Requirements,o.UnlockRequirements,o.AccessRequirements,o.SecondaryRequirements,...Object.values(o.Capabilities||{}).map(c=>c.Requirements)].filter(v=>v?.length).map(requirementText).join('')||'<span class="muted">无额外要求</span>';}
+function gateText(e,empty='<span class="muted">无额外要求</span>'){const o=e.obj;return [o.Requirements,o.UnlockRequirements,o.AccessRequirements,o.SecondaryRequirements,...Object.values(o.Capabilities||{}).map(c=>c.Requirements)].filter(v=>v?.length).map(requirementText).join('')||empty;}
+function masteryTaskObjectives(e){
+ const {Goal,ConditionGoal,TriggerGoal,LinkedTask}=e.obj;
+ const goals=[Goal,ConditionGoal,TriggerGoal].filter(Boolean).map(goal=>render(goal)).join('<br>');
+ const linked=byKey.get('MasteryGuildTask/'+shortId(LinkedTask));
+ return gateText(e,'')+goals+(linked?'<div class="gamefact">'+pageLink(linked.key,'查看关联任务')+'</div>':'')||'<span class="muted">—</span>';
+}
+function skillDetailRows(list){
+ return list.map(e=>[cell(e.title,eLink(e)),cell('',e.type==='MasteryGuildTask'?masteryTaskObjectives(e):gateText(e)+(e.obj.Goal?render(e.obj.Goal):'')),cell('',e.obj.Description?esc(tr(e.obj.Description)):pageLink(e.key,'查看详情'))]);
+}
 function parentText(e){
  const parents=grantingParents(e);
  let text=parents.length?parents.map(p=>eLink(p)+'<div>'+gateText(p)+'</div>').join('<hr>'):'';
@@ -247,7 +256,7 @@ function skillSections(list,skillOf,renderPart,{tag='h3',other='其他'}={}){
 function showSkill(id){
  const s=skillById.get(id);if(!s){wikiHome();return;}current='';updateList();
  const recipes=configEntries(id,'Recipes');const tabs=['Recipes','Animals','Courses','Constellations','MasteryGuildRanks','MasteryGuildBonuses','MasteryGuildTasks','Pets'];
- $('detail').innerHTML='<div class="breadcrumb">'+pageLink('@skills','技能总览')+'</div><h2>'+icon(s.entry,42)+esc(s.title)+'</h2><p>'+esc(s.entry.en)+' · '+boostLink(id)+' · '+pageLink('@guides','训练与解锁指南')+'</p><div class="note"><b>查看本技能的全部加成来源：</b> '+boostLink(id)+'。经验、间隔、翻倍、保留、收益和特殊效果均可按来源筛选。</div><h3>技能解锁条件</h3>'+gateText(s.entry)+(recipes.length?'<h3>配方与等级解锁</h3><p class="muted">基础周期：伐木按生命值次命中、工匠按步骤计时；钓鱼使用平均间隔。未计加成、失败、额外等待与银行满等中断。基础 XP/h 是该假设下的参考值。</p>'+dataTable(['目标 / 配方','解锁条件','基础 XP','基础周期','基础 XP/h','产物','材料'],recipeRows(recipes),'recipes'):'')+tabs.filter(f=>f!=='Recipes').map(field=>{if(field==='MasteryGuildRanks')return masterySection(id);if(field==='MasteryGuildBonuses')return '';const list=configEntries(id,field);return list.length?'<section><h3>'+esc(({Animals:'动物',Courses:'敏捷路线',Constellations:'星座',MasteryGuildRanks:'精通阶级',MasteryGuildBonuses:'精通奖励',MasteryGuildTasks:'精通任务',Pets:'宠物'})[field])+' · '+list.length+'</h3>'+dataTable(['条目','要求 / 目标','详情'],list.map(e=>[cell(e.title,eLink(e)),cell('',gateText(e)+(e.obj.Goal?render(e.obj.Goal):'')),cell('',e.obj.Description?esc(tr(e.obj.Description)):pageLink(e.key,'查看详情'))]))+'</section>':'';}).join('');
+ $('detail').innerHTML='<div class="breadcrumb">'+pageLink('@skills','技能总览')+'</div><h2>'+icon(s.entry,42)+esc(s.title)+'</h2><p>'+esc(s.entry.en)+' · '+boostLink(id)+' · '+pageLink('@guides','训练与解锁指南')+'</p><div class="note"><b>查看本技能的全部加成来源：</b> '+boostLink(id)+'。经验、间隔、翻倍、保留、收益和特殊效果均可按来源筛选。</div><h3>技能解锁条件</h3>'+gateText(s.entry)+(recipes.length?'<h3>配方与等级解锁</h3><p class="muted">基础周期：伐木按生命值次命中、工匠按步骤计时；钓鱼使用平均间隔。未计加成、失败、额外等待与银行满等中断。基础 XP/h 是该假设下的参考值。</p>'+dataTable(['目标 / 配方','解锁条件','基础 XP','基础周期','基础 XP/h','产物','材料'],recipeRows(recipes),'recipes'):'')+tabs.filter(f=>f!=='Recipes').map(field=>{if(field==='MasteryGuildRanks')return masterySection(id);if(field==='MasteryGuildBonuses')return '';const list=configEntries(id,field);return list.length?'<section><h3>'+esc(({Animals:'动物',Courses:'敏捷路线',Constellations:'星座',MasteryGuildRanks:'精通阶级',MasteryGuildBonuses:'精通奖励',MasteryGuildTasks:'精通任务',Pets:'宠物'})[field])+' · '+list.length+'</h3>'+dataTable(['条目','要求 / 目标','详情'],skillDetailRows(list))+'</section>':'';}).join('');
  $('detail').scrollTop=0;
 }
 function relatedTable(e,kind){const id=G.Namespace+':'+e.obj.Id,opts={tag:'h4'};
@@ -262,7 +271,7 @@ function browse(type){
  if(/Recipe$/.test(type)){headers=['目标 / 配方','解锁','基础 XP','基础周期','基础 XP/h','产物','材料'];toRows=recipeRows;}
  if(type==='Enemy'){headers=['敌人','等级属性','元素','掉落表'];toRows=part=>part.map(e=>[cell(e.title,eLink(e)),cell('',render(e.obj.Levels)),cell(shortId(e.obj.Element),render(e.obj.Element)),cell('',pageLink(e.key,'查看掉落与区域'))]);}
  if(type==='ShopPurchase'){headers=['商店项目','费用','解锁条件','提供'];toRows=part=>part.map(e=>[cell(e.title,eLink(e)),cell('',render(e.obj.Costs)),cell(levelOf(e.obj),gateText(e)),cell('',render(e.obj.Provides))]);}
- if(type==='Pet'||type==='MasteryGuildTask'){headers=['条目','要求 / 目标','详情'];toRows=part=>part.map(e=>[cell(e.title,eLink(e)),cell('',gateText(e)+(e.obj.Goal?render(e.obj.Goal):'')),cell('',e.obj.Description?esc(tr(e.obj.Description)):pageLink(e.key,'查看详情'))]);}
+ if(type==='Pet'||type==='MasteryGuildTask'){headers=['条目','要求 / 目标','详情'];toRows=part=>skillDetailRows(part);}
  // Skill-related lists are split into one section per skill; others stay a single table.
  const skillOf=type==='Item'?skillOfItem:/Recipe$/.test(type)||type==='Pet'||type==='MasteryGuildTask'?skillOfEntry:null;
  const body=skillOf?skillSections(list,skillOf,part=>dataTable(headers,toRows(part)),{other:type==='Item'?'其他物品（非技能产出）':'其他'}):dataTable(headers,toRows(list),'browse');

@@ -32,6 +32,24 @@ function eventText(value){
  if(type==='CharacterUsingStance')return prefix+'使用 '+ref('Stance');
  if(type==='EquipmentItemEquipped')return prefix+'装备 '+ref('Item');
  if(type==='ToolbeltItemEquipped')return prefix+'在工具腰带装备 '+ref('Item')+(d.Quantity?' × '+fmt(d.Quantity):'');
+ if(type==='WoodcuttingCutTree'&&d.MaxProgress!=null)return '砍倒 '+fmt(d.MaxProgress)+' 棵'+(d.Recipe?' '+refLink(d.Recipe,'WoodcuttingRecipe'):'树');
+ if(type==='PetUnlocked')return '找到宠物 '+refLink(d.Pet,'Pet');
+ if(type==='HuntingMaxLevelAnimals')return '将 '+fmt(d.Count)+' 种狩猎动物提升至 '+fmt(d.Level)+' 级';
+ if(type==='HuntingUniqueRareSpeciesFound')return '在狩猎中发现 '+fmt(d.Count)+' 种不同的稀有物种';
+ if(type==='HuntingUniqueCollectablesFound')return '在狩猎中发现 '+fmt(d.Count)+' 种不同的收藏品';
+ if(type==='HuntingAnimalSpecies'&&shortId(d.Statistic)==='HuntingAnimalSpeciesTrapped')return '捕获 '+refLink(d.Species,'HuntingAnimalSpecies')+' × '+fmt(d.Value);
+ if(type==='RanchingSameAnimalCount')return '饲养至少 '+fmt(d.MinimumCount)+' 只 '+refLink(d.Animal,'RanchingAnimal')+(d.SameEnclosure?'（需在同一围栏）':'');
+ if(type==='RanchingAnimalStatistic'&&shortId(d.Statistic)==='RanchingAnimalTimeSpentAliveStatistic')return '让 '+refLink(d.Animal,'RanchingAnimal')+' 累计存活 '+fmt(d.Value)+' 小时';
+ if(type==='AgilityNumTechniquesLevel')return '将至少 '+fmt(d.NumTechniques)+' 项灵巧技巧提升至 '+fmt(d.Level)+' 级';
+ if(type==='AgilityShortcutsCreated')return '在灵巧训练路线中开辟 '+fmt(d.Count)+' 条捷径';
+ if(type==='AgilityCourseStatistic'&&shortId(d.Statistic)==='AgilityCourseCompleted')return '完成 '+refLink(d.Course,'AgilityCourse')+' '+fmt(d.Value)+' 次';
+ if(type==='AstrologyEventStatistic'&&shortId(d.Statistic)==='AstrologyTimesEventObserved'){
+  const event=shortId(d.Event);
+  const target=byKey.get('AstrologyObservationEvent/'+event)||byKey.get('AstrologyItemEvent/'+event);
+  return '观察 '+(target?eLink(target):esc(humanWord(event)))+' '+fmt(d.Value)+' 次';
+ }
+ if(type==='SlayerMasterStatistic'&&shortId(d.Statistic)==='SlayerMasterTasksCompleted')return '为 '+refLink(d.Master,'SlayerMaster')+' 完成 '+fmt(d.Value)+' 个屠杀任务';
+ if(type==='ValueStatistic'&&/^AstrologyTotal(Major|Minor)NodesUnlocked$/.test(shortId(d.Statistic)))return '累计解锁 '+fmt(d.Value)+' 个'+(d.Statistic.includes('Major')?'主要':'小')+'占星节点';
  if(type==='DemoLocked')return '需要完整版本';
  if(type.endsWith('Statistic')){
   const action=/Killed/.test(d.Statistic)?'击败':/Sold/.test(d.Statistic)?'出售':/FromSale/.test(d.Statistic)?'出售累计获得':/Gained|Found/.test(d.Statistic)?'获得':'累计';

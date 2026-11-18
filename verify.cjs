@@ -118,6 +118,21 @@ run('browse("FiremakingRecipe")');assert.doesNotMatch(element('detail').innerHTM
 run('browse("Item")');assert.match(element('detail').innerHTML,/其他物品（非技能产出）/);
 run('browse("Enemy")');assert.doesNotMatch(element('detail').innerHTML,/skill-group-title/);
 assert.equal(run('skillOfEntry(byKey.get("MasteryGuildTask/WoodcuttingTask3"))'),'Woodcutting');
+assert.match(run('masteryTaskObjectives(byKey.get("MasteryGuildTask/WoodcuttingTask3"))'),/砍倒 15,000 棵[\s\S]*WoodcuttingRecipe%2FNormalTree[\s\S]*MasteryGuildTask%2FWoodcuttingTask2/);
+assert.match(run('masteryTaskObjectives(byKey.get("MasteryGuildTask/FishingTask3"))'),/钓鱼<\/a> 等级 60/);
+assert.match(run('masteryTaskObjectives(byKey.get("MasteryGuildTask/AttackTask144"))'),/装备 <a href="#Item%2FAmuletOfMelee"/);
+assert.match(run('masteryTaskObjectives(byKey.get("MasteryGuildTask/RanchingTask7"))'),/饲养至少 1 只 [\s\S]*RanchingAnimal%2FChicken/);
+assert.match(run('masteryTaskObjectives(byKey.get("MasteryGuildTask/WoodcuttingTask43"))'),/获得 <a href="#Item%2FBirdNest"/);
+assert.match(run('masteryTaskObjectives(byKey.get("MasteryGuildTask/AstrologyTask7"))'),/累计解锁 4 个主要占星节点/);
+assert.match(run('masteryTaskObjectives(byKey.get("MasteryGuildTask/AstrologyTask119"))'),/观察 [\s\S]*AstrologyItemEvent%2FStarfall[\s\S]* 1 次/);
+for(const e of ['showSkill("Fishing")','browse("MasteryGuildTask")','showWikiEntry("MasteryGuildTask/FishingTask3")']){
+ run(e);
+ const page=element('detail').innerHTML;
+ const tasks=e.startsWith('showSkill')?page.split('<h3>精通任务 · ')[1]?.split('</section>')[0]:page;
+ assert.ok(tasks?.includes('钓鱼</a> 等级 60'),e);
+ assert.ok(!tasks.includes('无额外要求'),e);
+}
+assert.equal(run('entries.filter(e=>e.type==="MasteryGuildTask").every(e=>!(/无额外要求|^<span class="muted">—/.test(masteryTaskObjectives(e))))'),true);
 assert.equal(run('skillOfEntry(byKey.get("Pet/WoodcuttingMasterPet"))'),'Woodcutting');
 run('showWikiEntry("Item/NormalLog")');
 assert.match(element('detail').innerHTML,/<h4 class="skill-group-title">[^<]*<img[^>]*>伐木 · 1<\/h4>/);
