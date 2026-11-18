@@ -97,6 +97,12 @@ run('showSkill("Attack")');
 assert.match(element('detail').innerHTML,/精通阶级与奖励 · 7/);
 assert.doesNotMatch(element('detail').innerHTML,/<h3>精通奖励/);
 assert.match(run('masterySection("Attack")'),/5%[\s\S]*?\+10%/);
+assert.equal(run('masteryTotalPoints("Woodcutting")'),413);
+assert.equal(run('masteryTotalPoints("Attack")'),543);
+assert.match(run('masterySection("Woodcutting")'),/所需精通点数[\s\S]*?MasteryGuildRank%2FApprenticeWoodcutter[^]*?<td data-value="21">21<\/td><td data-value="0.05">5%<\/td>/);
+assert.match(run('masterySection("Woodcutting")'),/MasteryGuildRank%2FExpertWoodcutter[^]*?<td data-value="413">413<\/td><td data-value="1">100%<\/td>/);
+run('showWikiEntry("MasteryGuildRank/ApprenticeWoodcutter")');
+assert.match(element('detail').innerHTML,/<th scope="row">所需精通点数<\/th><td>21<\/td>/);
 // Rank and bonus tables are one merged page, whichever route is used.
 run('browse("MasteryGuildBonus")');const masteryAll=element('detail').innerHTML;
 const noIds=html=>html.replace(/\bt\d+\b/g,'t');
@@ -104,6 +110,7 @@ run('browse("MasteryGuildRank")');assert.equal(noIds(element('detail').innerHTML
 assert.match(masteryAll,/精通公会阶级与奖励/);
 assert.match(masteryAll,/175 个阶级/);
 assert.match(masteryAll,/MasteryGuildRank%2FApprenticeSwordsman[\s\S]*?\+10%/);
+assert.match(masteryAll,/MasteryGuildRank%2FApprenticeSwordsman[^]*?<td data-value="28">28<\/td><td data-value="0.05">5%<\/td>/);
 // Tables spanning several skills are split into one titled section per skill.
 assert.equal((masteryAll.match(/class="skill-group-title"/g)||[]).length,25);
 assert.doesNotMatch(masteryAll,/<th[^>]*><button data-sort="0">技能/);
@@ -118,6 +125,12 @@ run('browse("FiremakingRecipe")');assert.doesNotMatch(element('detail').innerHTM
 run('browse("Item")');assert.match(element('detail').innerHTML,/其他物品（非技能产出）/);
 run('browse("Enemy")');assert.doesNotMatch(element('detail').innerHTML,/skill-group-title/);
 assert.equal(run('skillOfEntry(byKey.get("MasteryGuildTask/WoodcuttingTask3"))'),'Woodcutting');
+assert.deepEqual(JSON.parse(run('JSON.stringify(G.Objects.MasteryGuildCategory.map(c=>[c.Id,c.BasePoints]))')),[['Novice',1],['Easy',2],['Adept',3],['Intermediate',5],['Hard',8],['Expert',12]]);
+assert.equal(run('entries.filter(e=>e.type==="MasteryGuildTask").every(e=>Number.isInteger(masteryTaskCategory(e)?.obj.BasePoints))'),true);
+for(const code of ['showSkill("Woodcutting")','browse("MasteryGuildTask")']){
+ run(code);
+ assert.match(element('detail').innerHTML,/任务类别[\s\S]*?完成奖励（精通点数）[\s\S]*?MasteryGuildTask%2FWoodcuttingTask3[^]*?<small class="en">Adept<\/small><\/td><td data-value="3">3<\/td>/);
+}
 assert.match(run('masteryTaskObjectives(byKey.get("MasteryGuildTask/WoodcuttingTask3"))'),/砍倒 15,000 棵[\s\S]*WoodcuttingRecipe%2FNormalTree[\s\S]*MasteryGuildTask%2FWoodcuttingTask2/);
 assert.match(run('masteryTaskObjectives(byKey.get("MasteryGuildTask/FishingTask3"))'),/钓鱼<\/a> 等级 60/);
 assert.match(run('masteryTaskObjectives(byKey.get("MasteryGuildTask/AttackTask144"))'),/装备 <a href="#Item%2FAmuletOfMelee"/);

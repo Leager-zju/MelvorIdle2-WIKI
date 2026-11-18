@@ -81,6 +81,7 @@ function infoboxRows(e){
   if(o.Element)rows.push(['元素',esc(titleOf('Element',o.Element))]);
   const areas=enemyAreas(e);if(areas.length)rows.push(['出没地点',areas.map(link).join('、')]);
  }
+ if(e.type==='MasteryGuildRank')rows.push(['所需精通点数',fmt(masteryRankPoints(e,masteryTotalPoints(skillOfEntry(e))),0)]);
  if(o.SellsFor)rows.push(['出售价格',render(o.SellsFor)]);
  return rows;
 }

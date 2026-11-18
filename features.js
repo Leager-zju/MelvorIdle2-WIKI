@@ -136,8 +136,18 @@ function masteryTaskObjectives(e){
  const linked=byKey.get('MasteryGuildTask/'+shortId(LinkedTask));
  return gateText(e,'')+goals+(linked?'<div class="gamefact">'+pageLink(linked.key,'查看关联任务')+'</div>':'')||'<span class="muted">—</span>';
 }
+const masteryTaskCategory=e=>byKey.get('MasteryGuildCategory/'+shortId(e.obj.Category));
+const skillDetailHeaders=['条目','要求 / 目标','详情'];
+const masteryTaskHeaders=['任务','任务类别','完成奖励（精通点数）','要求 / 目标','详情'];
 function skillDetailRows(list){
- return list.map(e=>[cell(e.title,eLink(e)),cell('',e.type==='MasteryGuildTask'?masteryTaskObjectives(e):gateText(e)+(e.obj.Goal?render(e.obj.Goal):'')),cell('',e.obj.Description?esc(tr(e.obj.Description)):pageLink(e.key,'查看详情'))]);
+ return list.map(e=>{
+  const details=cell('',e.obj.Description?esc(tr(e.obj.Description)):pageLink(e.key,'查看详情'));
+  const title=cell(e.title,eLink(e));
+  if(e.type!=='MasteryGuildTask')return [title,cell('',gateText(e)+(e.obj.Goal?render(e.obj.Goal):'')),details];
+  const category=masteryTaskCategory(e),points=category?.obj.BasePoints;
+  const label=category?esc(category.title)+(category.en!==category.title?' <small class="en">'+esc(category.en)+'</small>':''):'—';
+  return [title,cell(points,label),cell(points,fmt(points,0)),cell('',masteryTaskObjectives(e)),details];
+ });
 }
 function parentText(e){
  const parents=grantingParents(e);
@@ -227,16 +237,28 @@ function rankRewards(bonuses,rankId){
   return (effects.length?'<ul>'+effects.map(x=>'<li>'+x+'</li>').join('')+'</ul>':'')+(gifts.length?render(gifts):'')+(extra.length?requirementText(extra):'')+(!effects.length&&!gifts.length?'<span class="muted">'+(note||'无奖励')+'</span>':'');
  }).join('')||'<span class="muted">—</span>';
 }
+function masteryTotalPoints(skill){
+ return configEntries(skill,'MasteryGuildTasks').reduce((total,e)=>total+masteryTaskCategory(e)?.obj.BasePoints,0);
+}
+const masteryRankPoints=(rank,total)=>Math.ceil(total*(rank.obj.PointPercentRequired??NaN));
+function masteryRankTable(ranks,skill,id){
+ const total=masteryTotalPoints(skill),bonuses=configEntries(skill,'MasteryGuildBonuses');
+ const rows=ranks.map(e=>{
+  const ratio=e.obj.PointPercentRequired,points=masteryRankPoints(e,total);
+  return [cell(e.title,link(e)),cell(points,fmt(points,0)),cell(ratio,pct(ratio)),cell('',rankRewards(bonuses,G.Namespace+':'+e.obj.Id))];
+ });
+ return dataTable(['阶级','所需精通点数','所需精通进度','奖励'],rows,id);
+}
 function masterySection(id){
- const ranks=configEntries(id,'MasteryGuildRanks'),bonuses=configEntries(id,'MasteryGuildBonuses');
+ const ranks=configEntries(id,'MasteryGuildRanks');
  if(!ranks.length)return '';
- return '<section><h3>精通阶级与奖励 · '+ranks.length+'</h3><p class="muted">达到所需精通进度即晋升该阶级，并获得对应奖励。</p>'+dataTable(['阶级','所需精通进度','奖励'],ranks.map(e=>[cell(e.title,link(e)),cell(e.obj.PointPercentRequired??'',pct(e.obj.PointPercentRequired)),cell('',rankRewards(bonuses,G.Namespace+':'+e.obj.Id))]),'mastery')+'</section>';
+ return '<section><h3>精通阶级与奖励 · '+ranks.length+'</h3><p class="muted">累计达到所需精通点数即可晋升并获得对应奖励。</p>'+masteryRankTable(ranks,id,'mastery')+'</section>';
 }
 // One table for all skills: guild ranks and the rewards they unlock (both type routes land here).
 function masteryTablePage(){
  const ranks=skillEntries.flatMap(s=>configEntries(s.id,'MasteryGuildRanks'));
- $('detail').innerHTML='<div class="breadcrumb">'+pageLink('','首页')+' › '+pageLink('@index','全部条目')+'</div><h2>精通公会阶级与奖励</h2><p>每个技能有 7 个精通公会阶级；达到所需精通进度即晋升，并获得对应奖励。共 '+ranks.length+' 个阶级，按技能分区。</p>'+
-  skillSections(ranks,skillOfEntry,(list,skill)=>{const bonuses=configEntries(skill,'MasteryGuildBonuses');return dataTable(['阶级','所需精通进度','奖励'],list.map(e=>[cell(e.title,link(e)),cell(e.obj.PointPercentRequired??'',pct(e.obj.PointPercentRequired)),cell('',rankRewards(bonuses,G.Namespace+':'+e.obj.Id))]));});
+ $('detail').innerHTML='<div class="breadcrumb">'+pageLink('','首页')+' › '+pageLink('@index','全部条目')+'</div><h2>精通公会阶级与奖励</h2><p>累计达到所需精通点数即可晋升并获得对应奖励。共 '+ranks.length+' 个阶级，按技能分区。</p>'+
+  skillSections(ranks,skillOfEntry,(list,skill)=>masteryRankTable(list,skill));
 }
 // Owning skill of an entry: the skill config that lists it, else the skill named by its goal / trigger / requirements.
 const skillFields=['Recipes','Animals','Courses','Constellations','MasteryGuildRanks','MasteryGuildBonuses','MasteryGuildTasks','Pets'];
@@ -256,7 +278,7 @@ function skillSections(list,skillOf,renderPart,{tag='h3',other='其他'}={}){
 function showSkill(id){
  const s=skillById.get(id);if(!s){wikiHome();return;}current='';updateList();
  const recipes=configEntries(id,'Recipes');const tabs=['Recipes','Animals','Courses','Constellations','MasteryGuildRanks','MasteryGuildBonuses','MasteryGuildTasks','Pets'];
- $('detail').innerHTML='<div class="breadcrumb">'+pageLink('@skills','技能总览')+'</div><h2>'+icon(s.entry,42)+esc(s.title)+'</h2><p>'+esc(s.entry.en)+' · '+boostLink(id)+' · '+pageLink('@guides','训练与解锁指南')+'</p><div class="note"><b>查看本技能的全部加成来源：</b> '+boostLink(id)+'。经验、间隔、翻倍、保留、收益和特殊效果均可按来源筛选。</div><h3>技能解锁条件</h3>'+gateText(s.entry)+(recipes.length?'<h3>配方与等级解锁</h3><p class="muted">基础周期：伐木按生命值次命中、工匠按步骤计时；钓鱼使用平均间隔。未计加成、失败、额外等待与银行满等中断。基础 XP/h 是该假设下的参考值。</p>'+dataTable(['目标 / 配方','解锁条件','基础 XP','基础周期','基础 XP/h','产物','材料'],recipeRows(recipes),'recipes'):'')+tabs.filter(f=>f!=='Recipes').map(field=>{if(field==='MasteryGuildRanks')return masterySection(id);if(field==='MasteryGuildBonuses')return '';const list=configEntries(id,field);return list.length?'<section><h3>'+esc(({Animals:'动物',Courses:'敏捷路线',Constellations:'星座',MasteryGuildRanks:'精通阶级',MasteryGuildBonuses:'精通奖励',MasteryGuildTasks:'精通任务',Pets:'宠物'})[field])+' · '+list.length+'</h3>'+dataTable(['条目','要求 / 目标','详情'],skillDetailRows(list))+'</section>':'';}).join('');
+ $('detail').innerHTML='<div class="breadcrumb">'+pageLink('@skills','技能总览')+'</div><h2>'+icon(s.entry,42)+esc(s.title)+'</h2><p>'+esc(s.entry.en)+' · '+boostLink(id)+' · '+pageLink('@guides','训练与解锁指南')+'</p><div class="note"><b>查看本技能的全部加成来源：</b> '+boostLink(id)+'。经验、间隔、翻倍、保留、收益和特殊效果均可按来源筛选。</div><h3>技能解锁条件</h3>'+gateText(s.entry)+(recipes.length?'<h3>配方与等级解锁</h3><p class="muted">基础周期：伐木按生命值次命中、工匠按步骤计时；钓鱼使用平均间隔。未计加成、失败、额外等待与银行满等中断。基础 XP/h 是该假设下的参考值。</p>'+dataTable(['目标 / 配方','解锁条件','基础 XP','基础周期','基础 XP/h','产物','材料'],recipeRows(recipes),'recipes'):'')+tabs.filter(f=>f!=='Recipes').map(field=>{if(field==='MasteryGuildRanks')return masterySection(id);if(field==='MasteryGuildBonuses')return '';const list=configEntries(id,field);return list.length?'<section><h3>'+esc(({Animals:'动物',Courses:'敏捷路线',Constellations:'星座',MasteryGuildRanks:'精通阶级',MasteryGuildBonuses:'精通奖励',MasteryGuildTasks:'精通任务',Pets:'宠物'})[field])+' · '+list.length+'</h3>'+dataTable(field==='MasteryGuildTasks'?masteryTaskHeaders:skillDetailHeaders,skillDetailRows(list))+'</section>':'';}).join('');
  $('detail').scrollTop=0;
 }
 function relatedTable(e,kind){const id=G.Namespace+':'+e.obj.Id,opts={tag:'h4'};
@@ -271,7 +293,7 @@ function browse(type){
  if(/Recipe$/.test(type)){headers=['目标 / 配方','解锁','基础 XP','基础周期','基础 XP/h','产物','材料'];toRows=recipeRows;}
  if(type==='Enemy'){headers=['敌人','等级属性','元素','掉落表'];toRows=part=>part.map(e=>[cell(e.title,eLink(e)),cell('',render(e.obj.Levels)),cell(shortId(e.obj.Element),render(e.obj.Element)),cell('',pageLink(e.key,'查看掉落与区域'))]);}
  if(type==='ShopPurchase'){headers=['商店项目','费用','解锁条件','提供'];toRows=part=>part.map(e=>[cell(e.title,eLink(e)),cell('',render(e.obj.Costs)),cell(levelOf(e.obj),gateText(e)),cell('',render(e.obj.Provides))]);}
- if(type==='Pet'||type==='MasteryGuildTask'){headers=['条目','要求 / 目标','详情'];toRows=part=>skillDetailRows(part);}
+ if(type==='Pet'||type==='MasteryGuildTask'){headers=type==='MasteryGuildTask'?masteryTaskHeaders:skillDetailHeaders;toRows=skillDetailRows;}
  // Skill-related lists are split into one section per skill; others stay a single table.
  const skillOf=type==='Item'?skillOfItem:/Recipe$/.test(type)||type==='Pet'||type==='MasteryGuildTask'?skillOfEntry:null;
  const body=skillOf?skillSections(list,skillOf,part=>dataTable(headers,toRows(part)),{other:type==='Item'?'其他物品（非技能产出）':'其他'}):dataTable(headers,toRows(list),'browse');
