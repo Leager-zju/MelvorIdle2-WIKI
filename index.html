@@ -614,6 +614,31 @@ function relatedTable(e,kind){const id=G.Namespace+':'+e.obj.Id,opts={tag:'h4'};
  const rows=[...new Map((usesByItem.get(id)||[]).map(r=>[r.entry.key,r])).values()];return rows.length?skillSections(rows,r=>skillOfEntry(r.entry),part=>dataTable(['用于','消耗数量','条件'],part.map(r=>[cell(r.entry.title,eLink(r.entry)),cell(r.quantity??'',fmt(r.quantity)),cell('',gateText(r.entry))])),{...opts,other:'其他用途'}):'<p class="muted">暂无已知的配方材料、费用或其他消耗记录。</p>';
 }
 function entryBoosts(e){const records=boostByOwner.get(e.key)||[];return records.length?'<h3>使用效果</h3><ul>'+records.map(r=>'<li>'+esc(effectText(r.m))+(r.m.Condition?'，需满足：'+render(r.m.Condition):'')+'</li>').join('')+'</ul>':'';}
+function shopSections(list,renderPart){
+ const shop=skillConfig('Shop');
+ const order=field=>new Map([...(shop[field]||[])].sort((a,b)=>a.Priority-b.Priority).map((r,i)=>[shortId(r.Id),i]));
+ const categories=order('Categories'),subcategories=order('Subcategories');
+ const rank=(order,id)=>order.get(id)??order.size;
+ const purchases=new Map([...subcategories.keys()].map(id=>[id,[]]));
+ for(const e of list){
+  const id=shortId(e.obj.Subcategory);
+  const key=byKey.has('ShopSubcategory/'+id)?id:'';
+  if(!purchases.has(key))purchases.set(key,[]);
+  purchases.get(key).push(e);
+ }
+ const groups=new Map();
+ for(const [id,rows] of [...purchases].sort(([a],[b])=>rank(subcategories,a)-rank(subcategories,b))){
+  const sub=byKey.get('ShopSubcategory/'+id);
+  if(!sub&&!rows.length)continue;
+  const category=byKey.get('ShopCategory/'+shortId(sub?.obj.Category));
+  if(!groups.has(category))groups.set(category,[]);
+  groups.get(category).push([sub,rows]);
+ }
+ return [...groups].sort(([a],[b])=>rank(categories,a?.obj.Id)-rank(categories,b?.obj.Id)).map(([category,sections])=>
+  '<section><h3 class="skill-group-title">'+icon(category,22)+esc(category?.title||'其他')+'</h3>'+
+  sections.map(([sub,rows])=>'<h4 class="skill-group-title">'+esc(sub?.title||'未分类')+'</h4>'+
+   (rows.length?renderPart(rows):'<p class="muted">暂无购买项目。</p>')).join('')+'</section>').join('');
+}
 function browse(type){
  if(type==='MasteryGuildRank'||type==='MasteryGuildBonus')return masteryTablePage();
  const list=entries.filter(e=>e.type===type);current='';updateList();
@@ -624,8 +649,10 @@ function browse(type){
  if(type==='Pet'||type==='MasteryGuildTask'){headers=type==='MasteryGuildTask'?masteryTaskHeaders:skillDetailHeaders;toRows=skillDetailRows;}
  // Skill-related lists are split into one section per skill; others stay a single table.
  const skillOf=type==='Item'?skillOfItem:/Recipe$/.test(type)||type==='Pet'||type==='MasteryGuildTask'?skillOfEntry:null;
- const body=skillOf?skillSections(list,skillOf,part=>dataTable(headers,toRows(part)),{other:type==='Item'?'其他物品（非技能产出）':'其他'}):dataTable(headers,toRows(list),'browse');
- $('detail').innerHTML='<h2>'+esc(typeNames[type]||type)+'</h2><p>'+list.length+' 个条目'+(skillOf?' · 按技能分区':'')+' · 所有列可排序，支持表内筛选与导出。</p>'+body;$('detail').scrollTop=0;
+ const table=part=>dataTable(headers,toRows(part));
+ const body=type==='ShopPurchase'?shopSections(list,table):skillOf?skillSections(list,skillOf,table,{other:type==='Item'?'其他物品（非技能产出）':'其他'}):dataTable(headers,toRows(list),'browse');
+ const grouping=type==='ShopPurchase'?' · 按商店类别与子类别分区':skillOf?' · 按技能分区':'';
+ $('detail').innerHTML='<h2>'+esc(typeNames[type]||type)+'</h2><p>'+list.length+' 个条目'+grouping+' · 所有列可排序，支持表内筛选与导出。</p>'+body;$('detail').scrollTop=0;
 }
 function showSkills(){current='';updateList();$('detail').innerHTML='<h2>技能总览</h2><p>查看技能的解锁要求、配方、训练与相关效果。</p><div class="skillgrid">'+skillEntries.map(s=>'<article>'+icon(s.entry,38)+'<h3>'+skillLink(s.id)+'</h3><small>'+esc(s.entry.en)+'</small><p>'+configEntries(s.id,'Recipes').length+' 个配方</p></article>').join('')+'</div>';}
 const storage={get(key,fallback){try{return JSON.parse(localStorage.getItem('melvor2-wiki-'+key))??fallback;}catch{return fallback;}},set(key,value){try{localStorage.setItem('melvor2-wiki-'+key,JSON.stringify(value));}catch{}}};

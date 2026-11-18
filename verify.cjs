@@ -105,6 +105,11 @@ for(const type of ['Item','ArtisanRecipe','Pet','MasteryGuildTask']){
 }
 // A list belonging to one skill stays a single table.
 run('browse("FiremakingRecipe")');assert.doesNotMatch(element('detail').innerHTML,/skill-group-title/);
+run('routePage("@table/ShopPurchase")');
+const shopPage=element('detail').innerHTML;
+const listedPurchases=[...shopPage.matchAll(/<tr><td[^>]*>(?:<img[^>]*>)?<a href="#(ShopPurchase%2F[^"]+)"/g)].map(m=>decodeURIComponent(m[1])).sort();
+assert.deepEqual(listedPurchases,packedEntries.map(([key])=>key).filter(key=>key.startsWith('ShopPurchase/')).sort());
+assert.match(run('shopSections([{obj:{Subcategory:"MelvorBase:Missing"}},{obj:{}}],rows=>String(rows.length))'),/>其他<\/h3><h4[^>]*>未分类<\/h4>2<\/section>/);
 assert.equal(run('entries.filter(e=>e.type==="MasteryGuildTask").every(e=>Number.isInteger(masteryTaskCategory(e)?.obj.BasePoints))'),true);
 assert.equal(run('entries.filter(e=>e.type==="MasteryGuildTask").every(e=>!(/无额外要求|^<span class="muted">—/.test(masteryTaskObjectives(e))))'),true);
 run('indexPage()');assert.doesNotMatch(element('detail').innerHTML,/%40table%2FMasteryGuildBonus/);
@@ -159,6 +164,10 @@ assert.equal(run('xpForLevel(2)'),83);
 assert.equal(run('xpForLevel(99)'),13034427);
 // Exact game values are regression fixtures for one executable build.
 if (referenceSnapshot) {
+ const mining=shopPage.match(/<h3[^>]*><img[^>]*>采矿<\/h3>([^]*?)<\/section>/)?.[1];
+ assert.ok(mining,'The shop should have a Mining category');
+ assert.match(mining,/<h4[^>]*>采矿工具<\/h4>[^]*?ShopPurchase%2FCopperPickaxe"[^]*?<h4[^>]*>采矿常规升级<\/h4><p class="muted">暂无购买项目。<\/p>/);
+ assert.match(shopPage,/>仓库栏位<\/h3>[^]*?>采矿<\/h3>/);
  run('wikiHome()');
  assert.match(element('detail').innerHTML, /1,811/);
  assert.equal(vm.runInContext('entries.length', context), 10929);
