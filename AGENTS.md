@@ -30,12 +30,15 @@
 
 **JS 拼接顺序固定**：`app.js → player-format.js → features.js → wiki-ui.js → contents.js`（见 `build.py`）。所有文件共享一个全局作用域；后面的文件可以用前面的函数，函数声明会提升，但**顶层语句**只能依赖已执行的文件。新增文件必须同时加入 `build.py` 的列表。
 
-每次改动后必须执行：
+**先改源码，再生成页面。** `index.html` 是构建产物，禁止直接编辑。数据提取、筛选和构建逻辑改对应的 Python 脚本，页面骨架改 `template.html`，渲染和交互改对应的 JavaScript，样式改 `style.css`。
+
+每次修改站点源码后，在 `wiki/` 目录运行一键更新，验证通过后才替换生成产物：
 
 ```powershell
-python wiki/build.py
-node wiki/verify.cjs   # 退出码必须为 0
+python update.py
 ```
+
+需要复用现有解包数据做分步调试时，可在同一目录运行 `python build.py` 和 `node verify.cjs`，两步退出码均须为 0。
 
 注意：PowerShell 里不要把 `node` 输出接到 `Select-Object -First N`，那会提前截断进程并造成假的 exit 1；改为重定向到文件后再读。
 
@@ -170,7 +173,7 @@ node wiki/verify.cjs   # 退出码必须为 0
 2. 用现有帮助函数实现；修共享逻辑而不是单页补丁。
 3. 文字全部经过 `esc()` / 链接函数，无内部字段外露。
 4. 跨技能表已拆分、长表会滚动、“或”条件已合并、标题不在卡片里。
-5. `verify.cjs` 加了针对性断言；`python wiki/build.py` 与 `node wiki/verify.cjs` 均通过。
+5. `verify.cjs` 加了针对性断言；已从源码重新生成页面并通过验证。
 6. 视觉改动做过无头 Edge 截图检查（桌面 + 窄屏）。
 7. 用户可见的行为变化同步到 `README.md`；与参考站点的对应关系同步到 `FEATURES.md`。
 
