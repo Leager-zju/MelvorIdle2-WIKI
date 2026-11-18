@@ -305,16 +305,16 @@ function stopCombatSimulation(){
  combatSimulation=null;
 }
 function combatSimulationResults(enemy,limits,result){
- const estimate=x=>fmt(x.mean,3)+' ± '+fmt(x.margin,3);
+ const estimate=x=>fmt(x.mean)+' ± '+fmt(x.margin);
  const drops=combatDropExpectations(enemy.obj).map(([key,each])=>{
   const entry=byKey.get(key),expected=result.kills.mean*each;
-  return [cell(entry?.title||'—',eLink(entry)),cell(each,fmt(each,6)),cell(expected,fmt(expected,6))];
+  return [cell(entry?.title||'—',eLink(entry)),cell(each),cell(expected)];
  }).sort((a,b)=>b[2].value-a[2].value);
  const missing=limits.length?'<p class="note">以下机制未计入结果：'+esc(limits.join('、'))+'。它们可能显著改变承伤、击杀数和掉落。</p>':'';
  return '<h3>'+eLink(enemy)+' · 模拟结果</h3>'+missing+
   '<p><b>累计承伤</b> '+estimate(result.damage)+' HP　 <b>预计击杀</b> '+estimate(result.kills)+'　 <b>模拟死亡比例</b> '+pct(result.deathRate)+'</p>'+
-  '<p>平均净失血 '+fmt(result.netLoss,3)+' HP，平均剩余生命 '+fmt(result.remaining,3)+' HP。</p>'+
-  '<p>'+fmt(result.seconds,3)+' 秒 · '+fmt(result.samples,0)+' 次试验 · 种子 '+fmt(result.seed,0)+'。± 为近似 95% 抽样误差，实际结果还受模型覆盖的机制影响。</p>'+
+  '<p>平均净失血 '+fmt(result.netLoss)+' HP，平均剩余生命 '+fmt(result.remaining)+' HP。</p>'+
+  '<p>'+fmt(result.seconds)+' 秒 · '+fmt(result.samples,0)+' 次试验 · 种子 '+fmt(result.seed,0)+'。± 为近似 95% 抽样误差，实际结果还受模型覆盖的机制影响。</p>'+
   '<h3>基础掉落期望</h3>'+(drops.length?dataTable(['掉落','每次击杀期望','所选时长内期望'],drops):'<p class="muted">暂无基础掉落。</p>');
 }
 function startCombatSimulation(form){

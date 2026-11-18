@@ -73,11 +73,11 @@ function infoboxRows(e){
   if(typeof o.Category==='string')rows.push(['分类',esc(byId.get(o.Category)?.[0]?.title||humanWord(o.Category))]);
   if(o.Requirements?.length||o.UnlockRequirements?.length)rows.push(['要求',gateText(e)]);
   if(o.BaseExperience!=null)rows.push(['基础经验',fmt(o.BaseExperience)+' XP']);
-  const ms=recipeTime(e);if(ms)rows.push(['基础耗时',fmt(ms/1000,3)+' 秒']);
+  const ms=recipeTime(e);if(ms)rows.push(['基础耗时',fmt(ms/1000)+' 秒']);
  }
  if(e.type==='Enemy'){
   for(const l of o.Levels||[])rows.push([esc(skillName(shortId(l.Key))),fmt(l.Value)]);
-  const interval=o.Stats?.Stats?.find(s=>shortId(s.Stat)==='AttackInterval');if(interval)rows.push(['攻击间隔',fmt(interval.Value/1000,3)+' 秒']);
+  const interval=o.Stats?.Stats?.find(s=>shortId(s.Stat)==='AttackInterval');if(interval)rows.push(['攻击间隔',fmt(interval.Value/1000)+' 秒']);
   if(o.Element)rows.push(['元素',esc(titleOf('Element',o.Element))]);
   const areas=enemyAreas(e);if(areas.length)rows.push(['出没地点',areas.map(link).join('、')]);
  }
@@ -86,7 +86,7 @@ function infoboxRows(e){
  return rows;
 }
 function infobox(e){
- const desc=plain(tr(e.obj.Description||e.obj.CustomDescription||''));
+ const desc=displayText(tr(e.obj.Description||e.obj.CustomDescription||''));
  return '<table class="infobox"><caption>'+esc(e.title)+'</caption>'+(icon(e,96)?'<tr><td colspan="2" class="infobox-image">'+icon(e,96)+'</td></tr>':'')+
   (desc?'<tr><td colspan="2" class="infobox-desc">'+esc(desc)+'</td></tr>':'')+infoboxRows(e).map(([k,v])=>'<tr><th scope="row">'+k+'</th><td>'+v+'</td></tr>').join('')+'</table>';
 }
@@ -94,7 +94,7 @@ function equipmentSection(e){
  const c=e.obj.Capabilities||{},eq=c['MelvorBase:Equipment'];if(!eq)return '';
  const rows=[...equipmentStats(e)].map(([k,v])=>{
   const [kind,type]=k.split(' / '),label=type?kind+'（'+titleOf('DamageType',type)+'）':titleOf('CombatStat',k);
-  return '<tr><th scope="row">'+esc(label)+'</th><td>'+(k==='AttackInterval'?fmt(v/1000,3)+' 秒':signed(v))+'</td></tr>';
+  return '<tr><th scope="row">'+esc(label)+'</th><td>'+(k==='AttackInterval'?fmt(v/1000)+' 秒':signed(v))+'</td></tr>';
  }).join('');
  const extra=Object.fromEntries(Object.entries(eq).filter(([f])=>!['Type','Requirements','Stats','Bonuses','OccupiesSlots'].includes(f)));
  return '<section><h3>装备属性</h3><p>装备槽位：'+esc(titleOf('EquipmentType',eq.Type))+'</p>'+(rows?'<table class="data statgrid">'+rows+'</table>':'')+(c['MelvorBase:Weapon']?render(c['MelvorBase:Weapon']):'')+(Object.values(extra).some(v=>v!=null&&v!==false&&!(Array.isArray(v)&&!v.length))?render(extra):'')+'</section>';
@@ -144,7 +144,7 @@ function searchPage(q){
  for(const e of results)counts.set(e.type,(counts.get(e.type)||0)+1);
  $('detail').innerHTML='<h2>搜索结果：“'+esc(q)+'”</h2><p>共找到 '+fmt(results.length,0)+' 个条目'+(results.length>300?'，显示前 300 个':'')+'。</p>'+
   (counts.size>1?'<div class="toc"><button data-type-filter="" aria-pressed="true">全部 ('+results.length+')</button>'+[...counts].map(([t,n])=>'<button data-type-filter="'+esc(t)+'" aria-pressed="false">'+esc(typeNames[t]||t)+' ('+n+')</button>').join('')+'</div>':'')+
-  (results.length?'<ul class="results">'+results.slice(0,300).map(e=>{const d=plain(tr(e.obj.Description||''));return '<li data-type="'+esc(e.type)+'">'+icon(e,32)+'<div>'+link(e)+' <small>'+esc(typeNames[e.type]||e.type)+' · '+esc(e.en)+'</small>'+(d?'<p>'+esc(d.length>120?d.slice(0,120)+'…':d)+'</p>':'')+'</div></li>';}).join('')+'</ul>':'<p class="muted">没有找到匹配条目。可以尝试英文名、更短的关键词，或浏览'+pageLink('@index','全部条目索引')+'。</p>');
+  (results.length?'<ul class="results">'+results.slice(0,300).map(e=>{const d=displayText(tr(e.obj.Description||''));return '<li data-type="'+esc(e.type)+'">'+icon(e,32)+'<div>'+link(e)+' <small>'+esc(typeNames[e.type]||e.type)+' · '+esc(e.en)+'</small>'+(d?'<p>'+esc(d.length>120?d.slice(0,120)+'…':d)+'</p>':'')+'</div></li>';}).join('')+'</ul>':'<p class="muted">没有找到匹配条目。可以尝试英文名、更短的关键词，或浏览'+pageLink('@index','全部条目索引')+'。</p>');
 }
 function indexPage(){
  const list=types.filter(t=>playerTypes.has(t)&&G.Objects[t].length&&t!=='MasteryGuildBonus');
@@ -165,7 +165,7 @@ function previewEntry(hash){
 function previewMarkup(e){
  const isItem=e.type==='Item',id=G.Namespace+':'+e.obj.Id;
  const kind=isItem?itemKind(e):typeNames[e.type]||'条目';
- const desc=plain(tr(e.obj.Description||e.obj.CustomDescription||''));
+ const desc=displayText(tr(e.obj.Description||e.obj.CustomDescription||''));
  const row=(label,value)=>value?'<p><b>'+label+'</b> '+esc(value)+'</p>':'';
  const titles=rows=>[...new Set((rows||[]).map(r=>r.entry.title))].slice(0,3).join('、');
  return '<div class="preview-title">'+icon(e,40)+'<div><strong>'+esc(e.title)+'</strong><small>'+esc(kind+(e.en!==e.title?' · '+e.en:''))+'</small></div></div>'+

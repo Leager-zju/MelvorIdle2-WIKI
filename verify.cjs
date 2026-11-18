@@ -40,6 +40,13 @@ assert.equal(vm.runInContext('esc("<img onerror=alert(1)>")',context),'&lt;img o
 // Render every object, not only the examples, to catch unusual structures.
 vm.runInContext('for (const e of entries) { render(e.obj); }',context,{timeout:60000});
 const run = code => vm.runInContext(code,context,{timeout:60000});
+assert.equal(run('fmt(1.23456,6)'),'1.23');
+assert.equal(run('fmt(1.235)'),'1.24');
+assert.equal(run('fmt(2)'),'2');
+assert.equal(run('signed(-0.001)'),'0');
+assert.equal(run('pct(1/23)'),'4.35%');
+assert.equal(run('displayText("v0.11.6 · +0.025%")'),'v0.11.6 · +0.03%');
+assert.match(run('dataTable(["数值"],[[cell(1.23456)]])'),/<td data-value="1\.23456">1\.23<\/td>/);
 const packedEntries = Object.entries(data.game.Objects).flatMap(([type,objects])=>objects.map(obj=>[type+'/'+obj.Id,obj]));
 assert.equal(run('entries.length'),packedEntries.length);
 assert.equal(run('byKey.size'),packedEntries.length);
@@ -130,7 +137,11 @@ assert.equal(run('sortValues("10","2")'),8);
 assert.equal(run('csvValue("=SUM(A1)")'),'"\'=SUM(A1)"');
 const boostHref = /href="#[^"]*(?:%40boosts|@boosts|%2FBoosts|\/Boosts)/i;
 const rawContent = /<pre|<code|完整配置|原始 JSON|字段路径|组件配置|LocalContext|FromContext|StatsType|EntityConfig|MelvorBase:/;
-const assertPlayerPage = () => assert.doesNotMatch(element('detail').innerHTML.replace(/<[^>]*>/g,''),rawContent);
+const assertPlayerPage = () => {
+ const text=element('detail').innerHTML.replace(/<[^>]*>/g,'');
+ assert.doesNotMatch(text,rawContent);
+ assert.ok(!/(?<![\w.])\d+\.\d{3,}(?![\d.])/.test(text),'player numbers have at most two decimal places');
+};
 assert.match(element('wiki-nav').innerHTML,/#%40combat-simulator">战斗模拟器/);
 run('routePage("@combat-simulator")');
 assert.match(element('detail').innerHTML,/<h2>战斗模拟器<\/h2>[^]*?name="seconds"[^]*?name="evasion-Stab"[^]*?name="power-Normal"[^]*?name="protection-Normal"/);
@@ -241,7 +252,9 @@ if (referenceSnapshot) {
  element('search').value='';
  vm.runInContext('showWikiEntry("Enemy/Golbin")',context);
  assert.match(element('detail').innerHTML, /Item%2FStoneSword/);
- assert.match(element('detail').innerHTML, /4.3478%/);
+ assert.match(element('detail').innerHTML, /4.35%/);
+ run('showWikiEntry("Item/IntermediateWoodcuttingHat")');
+ assert.match(element('detail').innerHTML,/鸟\/鹰巢几率 \+0\.03%/);
  vm.runInContext('showWikiEntry("Item/StoneSword")',context);
  assert.match(element('detail').innerHTML,/class="infobox"/);
  assert.match(element('detail').innerHTML,/class="lead"/);

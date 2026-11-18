@@ -2,9 +2,14 @@
 Object.assign(typeNames,{EquipmentSetBonus:'装备套装',ThievingDistraction:'扒窃干扰',ThievingHeistBonus:'扒窃劫案奖励',HuntingJournalBonus:'狩猎日志奖励',AstrologyBonusesEvent:'占星事件',RareBonusesEvent:'稀有事件',RanchingEnclosureUpgrade:'围栏升级',TurnCountingEffect:'回合效果',StackingEffect:'叠加效果',AttackChargingEffect:'攻击充能效果',AttackCountingEffect:'攻击计数效果',AgilityTechnique:'敏捷技巧',FarmingCategory:'种植类别',RanchingAnimalVariant:'动物变种',CombatTriangleBonus:'战斗三角',ElementalBonus:'元素加成',OvergrowthEffect:'过度生长效果',RandomMagnitudeEffect:'随机强度效果',StunEffect:'眩晕效果',DamageOverTimeEffect:'持续伤害效果',AttackStance:'攻击姿态',Imbuement:'附魔'});
 Object.assign(labels,{LocalContext:'适用范围',FromContext:'经验 / 事件来源范围',Scaling:'动态缩放',StatGroup:'全局属性',StatsType:'属性系统',Modifiers:'修饰',UnlockLevel:'解锁等级',ItemCount:'套装件数',LinkedShopPurchase:'关联商店购买',UnlockKnowledge:'解锁知识',Duration:'持续时间',Turns:'回合',Charges:'充能',ConsumesOn:'消耗触发',Trigger:'触发方式',SecondaryRequirements:'额外条件',Slots:'槽位',CombatEffect:'战斗效果',Effects:'效果',Effect:'效果',BonusesWhenGrown:'成熟时加成',JournalModifierTemplate:'日志加成模板',BaitModifierTemplate:'诱饵加成模板',WateringModifierTemplate:'浇水加成模板'});
 const playerTypes=new Set(Object.keys(typeNames).filter(t=>!['RecipeCategory','RecipeSubcategory','FarmingCategory'].includes(t)));
-const fmt=(n,d=2)=>Number.isFinite(n)?n.toLocaleString('zh-CN',{maximumFractionDigits:d}):'—';
-const pct=n=>Number.isFinite(n)?fmt(n*100,4)+'%':'—';
-const signed=n=>(n>0?'+':'')+fmt(n,6);
+function fmt(n,d=2){
+ if(!Number.isFinite(n))return '—';
+ const shown=n.toLocaleString('zh-CN',{maximumFractionDigits:Math.min(d,2)});
+ return shown==='-0'?'0':shown;
+}
+const pct=n=>Number.isFinite(n)?fmt(n*100)+'%':'—';
+function signed(n){const shown=fmt(n);return n>0&&shown!=='0'?'+'+shown:shown;}
+const displayText=text=>plain(text).replace(/(?<![\w.])[-+]?\d+\.\d{3,}(?![\d.])/g,n=>n.startsWith('+')?signed(Number(n)):fmt(Number(n)));
 const shortId=x=>String(x||'').split(':').pop();
 const itemEntry=id=>byKey.get('Item/'+shortId(id));
 const href=key=>'#'+encodeURIComponent(key);
@@ -87,9 +92,10 @@ function findTemplate(m){
 function valueText(m,token){
  const v=m.Value;
  if(token.includes(':cond:')){const rules=token.split(':cond:')[1].slice(0,-1).split('|');for(const rule of rules){const match=rule.match(/^(>=|<=|>|<|=)(-?[\d.]+)\?(.*)$/);if(!match)continue;const b=Number(match[2]);if(({'>=':v>=b,'<=':v<=b,'>':v>b,'<':v<b,'=':v===b})[match[1]])return match[3];}return '';}
- if(/intervaltime|numbertime/.test(token))return fmt(v/1000,3)+' 秒';
- if(token.includes('%'))return (token.includes('+')&&v>0?'+':'')+fmt(v*100,4)+'%';
- return (token.includes('+')&&v>0?'+':'')+fmt(v,6);
+ if(/intervaltime|numbertime/.test(token))return fmt(v/1000)+' 秒';
+ const format=token.includes('+')?signed:fmt;
+ if(token.includes('%'))return format(v*100)+'%';
+ return format(v);
 }
 function contextText(m,path){
  const parts=path.split('.');let value=parts.shift()==='FromContext'?m.FromContext?.Data:m.LocalContext;
@@ -141,7 +147,7 @@ const skillDetailHeaders=['条目','要求 / 目标','详情'];
 const masteryTaskHeaders=['任务','任务类别','完成奖励（精通点数）','要求 / 目标','详情'];
 function skillDetailRows(list){
  return list.map(e=>{
-  const details=cell('',e.obj.Description?esc(tr(e.obj.Description)):pageLink(e.key,'查看详情'));
+  const details=cell('',e.obj.Description?esc(displayText(tr(e.obj.Description))):pageLink(e.key,'查看详情'));
   const title=cell(e.title,eLink(e));
   if(e.type!=='MasteryGuildTask')return [title,cell('',gateText(e)+(e.obj.Goal?render(e.obj.Goal):'')),details];
   const category=masteryTaskCategory(e),points=category?.obj.BasePoints;
@@ -186,11 +192,11 @@ function acquisition(e){
  return (rows.length?'<ul>'+rows.map(r=>'<li>'+eLink(r.entry)+' · '+esc(r.basis)+' · '+quantity(r)+' · '+pct(r.chance)+'</li>').join('')+'</ul>':'')+parentText(e)+gateText(e);
 }
 function quantity(r){return r.min==null?'—':r.min===r.max?fmt(r.min):fmt(r.min)+'–'+fmt(r.max);}
-function cell(value,html){return {value,html:html??esc(value??'—')};}
+function cell(value,html){return {value,html:html??esc(typeof value==='number'?fmt(value):value??'—')};}
 let tableIndex=0;
 const LONG_TABLE_ROWS=15;// longer tables get a fixed-height scroll box with a sticky header
 function dataTable(headers,rows,id='t'+(++tableIndex),tableClass=''){
- return '<div class="tabletools"><label>筛选本表 <input type="search" data-filter="'+id+'" placeholder="名称、英文或表内文本"></label><button data-export="'+id+'">导出 CSV</button><small>'+rows.length+' 行 · 点击列标题排序'+(rows.length>LONG_TABLE_ROWS?' · 表内滚动查看全部':'')+'</small></div><div class="tablewrap'+(rows.length>LONG_TABLE_ROWS?' scroll':'')+'"'+(rows.length>LONG_TABLE_ROWS?' tabindex="0" role="region" aria-label="可滚动表格，共 '+rows.length+' 行"':'')+'><table class="querytable '+esc(tableClass)+'" id="'+id+'"><thead><tr>'+headers.map((h,i)=>'<th scope="col" aria-sort="none"><button data-sort="'+i+'">'+esc(h)+' ↕</button></th>').join('')+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+row.map(c=>'<td data-value="'+esc(c?.value??'')+'">'+(c?.html??esc(c??'—'))+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
+ return '<div class="tabletools"><label>筛选本表 <input type="search" data-filter="'+id+'" placeholder="名称、英文或表内文本"></label><button data-export="'+id+'">导出 CSV</button><small>'+rows.length+' 行 · 点击列标题排序'+(rows.length>LONG_TABLE_ROWS?' · 表内滚动查看全部':'')+'</small></div><div class="tablewrap'+(rows.length>LONG_TABLE_ROWS?' scroll':'')+'"'+(rows.length>LONG_TABLE_ROWS?' tabindex="0" role="region" aria-label="可滚动表格，共 '+rows.length+' 行"':'')+'><table class="querytable '+esc(tableClass)+'" id="'+id+'"><thead><tr>'+headers.map((h,i)=>'<th scope="col" aria-sort="none"><button data-sort="'+i+'">'+esc(h)+' ↕</button></th>').join('')+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+row.map(c=>'<td data-value="'+esc(c?.value??'')+'">'+(c?.html??cell(c).html)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
 }
 function boostCards(records){
  return boostGroups.map((group,index)=>{
@@ -233,7 +239,7 @@ function rankRewards(bonuses,rankId){
   const effects=(boostByOwner.get(b.key)||[]).map(r=>esc(effectText(r.m))+(r.m.Condition?'（'+render(r.m.Condition)+'）':''));
   const rw=b.obj.Rewards||{},gifts=[...(rw.Items||[]),...(rw.Currencies||[])];
   const extra=(b.obj.Requirements||[]).filter(r=>!r.Data?.Rank);
-  const note=b.obj.CustomDescription?esc(plain(tr(b.obj.CustomDescription))):'';
+  const note=b.obj.CustomDescription?esc(displayText(tr(b.obj.CustomDescription))):'';
   return (effects.length?'<ul>'+effects.map(x=>'<li>'+x+'</li>').join('')+'</ul>':'')+(gifts.length?render(gifts):'')+(extra.length?requirementText(extra):'')+(!effects.length&&!gifts.length?'<span class="muted">'+(note||'无奖励')+'</span>':'');
  }).join('')||'<span class="muted">—</span>';
 }

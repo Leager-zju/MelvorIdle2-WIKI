@@ -73,14 +73,14 @@ function playerRender(value,field='',depth=0){
  if(value==null)return '<span class="muted">—</span>';
  if(typeof value==='boolean')return value?'是':'否';
  if(typeof value==='number'){
-  if(/Interval$/.test(field))return fmt(value/1000,3)+' 秒';
+  if(/Interval$/.test(field))return fmt(value/1000)+' 秒';
   if(/Chance|Percent|Satisfaction/.test(field))return pct(value);
-  return fmt(value,6);
+  return fmt(value);
  }
  if(typeof value==='string'){
   if(value.startsWith('res://'))return '';
   if(value.includes(':')&&/^(MelvorBase|Placeholder):/.test(value))return playerRef(value,field);
-  return esc(plain(tr(value))).replace(/\n/g,'<br>');
+  return esc(displayText(tr(value))).replace(/\n/g,'<br>');
  }
  if(depth>10)return '<span class="muted">效果取决于当前目标与状态</span>';
  if(Array.isArray(value)){
