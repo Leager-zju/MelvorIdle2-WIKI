@@ -31,7 +31,7 @@ function buildSidebar(){
  $('wiki-nav').innerHTML=section('导航',[pageLink('','首页'),pageLink('@guides','新手指南'),pageLink('@skills','技能总览'),pageLink('@index','全部条目'),pageLink('@random','随机条目')])+
   skillGroups.map(g=>section(esc(g.title),g.skills.map(s=>skillIcon(s.id,18)+skillLink(s.id)))).join('')+
   section('参考表',tableLinks.map(([t,n])=>pageLink(tableHref(t),n)))+
-  section('工具',[pageLink('@tools','经验表与计算器'),pageLink('@equipment','装备对比'),pageLink('@favorites','收藏与最近浏览'),pageLink('@info','关于本 Wiki')]);
+  section('工具',[pageLink('@tools','经验表与计算器'),pageLink('@combat-simulator','战斗模拟器'),pageLink('@equipment','装备对比'),pageLink('@favorites','收藏与最近浏览'),pageLink('@info','关于本 Wiki')]);
  $('footer').innerHTML='<p>Melvor Idle 2 中文 Wiki · 数据来自游戏 <b>v'+esc(VERSION)+'</b> · 收录 '+fmt(entries.filter(e=>playerTypes.has(e.type)).length,0)+' 个条目</p><p class="muted">非官方玩家资料站，可在线浏览，也可下载后离线使用。游戏内容与图像版权归 Games by Malcs 所有。数值为游戏基础配置，实际效果以游戏内为准。'+pageLink('@info','关于本 Wiki')+'</p>';
 }
 
@@ -222,6 +222,7 @@ document.addEventListener('click',hideLinkPreview);
 
 function afterRoute(key){
  hideLinkPreview();
+ stopCombatSimulation();
  const main=$('detail');
  if(key&&!key.startsWith('@links/'))main.insertAdjacentHTML('beforeend',mainNavbox());
  document.title=(key?(main.querySelector('h2')?.textContent||'Melvor Idle 2')+' - ':'')+'Melvor Idle 2 中文 Wiki';

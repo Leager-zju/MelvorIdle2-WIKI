@@ -131,6 +131,52 @@ assert.equal(run('csvValue("=SUM(A1)")'),'"\'=SUM(A1)"');
 const boostHref = /href="#[^"]*(?:%40boosts|@boosts|%2FBoosts|\/Boosts)/i;
 const rawContent = /<pre|<code|完整配置|原始 JSON|字段路径|组件配置|LocalContext|FromContext|StatsType|EntityConfig|MelvorBase:/;
 const assertPlayerPage = () => assert.doesNotMatch(element('detail').innerHTML.replace(/<[^>]*>/g,''),rawContent);
+assert.match(element('wiki-nav').innerHTML,/#%40combat-simulator">战斗模拟器/);
+run('routePage("@combat-simulator")');
+assert.match(element('detail').innerHTML,/<h2>战斗模拟器<\/h2>[^]*?name="seconds"[^]*?name="evasion-Stab"[^]*?name="power-Normal"[^]*?name="protection-Normal"/);
+assertPlayerPage();
+assert.equal(run('combatKernel.hitChance(300,600)'),.25);
+assert.equal(run('combatKernel.hitChance(600,300)'),.75);
+assert.equal(run('combatKernel.resistance(1,99)'),.7);
+assert.equal(run('combatKernel.damage(40,.5,2,4,3)'),7);
+assert.equal(run('combatKernel.damage(0,1,0,0,0)'),0);
+assert.equal(run('combatKernel.ticks(2400)'),144);
+assert.throws(()=>run('combatNumber("",1,1000,true,"模拟时长")'),/模拟时长/);
+const combatFixture=`({
+ player:{hp:10,ward:0,armour:0,interval:1000,crit:0,lifesteal:0},
+ profiles:[{hp:1,ward:0,armour:0,interval:120,lifesteal:0,playerMin:1,playerMax:1,playerHit:1,playerFactor:1,enemyHit:1,
+  attacks:[{factor:1,avoidable:true,hits:[{damage:[[0,10,10]],wait:1}]}]}],
+ seconds:8,spawnSeconds:3,samples:32,seed:0
+})`;
+const combatRun=overrides=>JSON.parse(run(`(()=>{
+ const input=${combatFixture}; ${overrides}
+ const job=combatKernel.createJob(input);
+ while(!job.step(1)){}
+ return JSON.stringify(job.summary());
+})()`));
+assert.deepEqual(combatRun('').kills,{mean:2,margin:0});
+assert.equal(combatRun('input.seconds=3.99;').kills.mean,0);
+const simultaneous=combatRun('input.profiles[0].interval=60;');
+assert.equal(simultaneous.kills.mean,0);
+assert.equal(simultaneous.damage.mean,10);
+assert.equal(simultaneous.deathRate,1);
+assert.equal(combatRun('input.profiles[0].interval=60; input.player.hp=30;').damage.mean,20);
+assert.equal(combatRun('input.profiles[0].playerHit=0; input.seconds=4;').kills.mean,0);
+const multiHit=combatRun('input.seconds=5.3; input.player.hp=100; input.player.interval=60000; input.profiles[0].interval=60; input.profiles[0].attacks[0].hits.push({damage:[[0,5,5]],wait:16});');
+assert.equal(multiHit.damage.mean,25);
+const seeded='input.profiles[0].playerHit=.5; input.player.hp=75;';
+assert.deepEqual(combatRun(seeded),combatRun(seeded));
+const combatPlayer=`{
+ stance:'MelvorBase:Stab',element:'MelvorBase:Neutral',damageType:'MelvorBase:Normal',
+ interval:2400,accuracy:750,min:1,max:30,crit:0,critMultiplier:1.5,hp:100,ward:0,armour:0,lifesteal:0,
+ evasion:{'MelvorBase:Stab':640},power:{'MelvorBase:Normal':63},protection:{'MelvorBase:Normal':0}
+}`;
+assert.ok(run(`entries.filter(e=>e.type==='Enemy').every(e=>compileCombatEnemy(e,${combatPlayer}).profiles.every(p=>
+ p.hp>0&&p.interval>0&&p.attacks.length&&p.attacks.every(a=>Number.isFinite(a.factor))))`));
+assert.equal(run(`Object.fromEntries(combatDropExpectations({Drops:{
+ FixedItems:[{Item:'MelvorBase:Stone',MinQuantity:1,MaxQuantity:3}],
+ ItemTables:[{Chance:.5,Table:[{Item:'MelvorBase:Stone',MinQuantity:2,MaxQuantity:4,Weight:1},{Item:'MelvorBase:Ash',Quantity:1,Weight:3}]}]
+ }}))['Item/Stone']`),2.375);
 assert.doesNotMatch(html.slice(0,html.indexOf('<script')),boostHref);
 for(const code of ['wikiHome()','showWikiEntry("Item/GrapplingHook")','showWikiEntry("Enemy/Golbin")','showSkills()',
  'toolsPage()','guidesPage()','infoPage()','combatPage()','equipmentPage()','browse("Item")','browse("ShopPurchase")','showSaved()','indexPage()','searchPage("Log")','linksHerePage("Item/NormalLog")']) {
@@ -164,6 +210,16 @@ assert.equal(run('xpForLevel(2)'),83);
 assert.equal(run('xpForLevel(99)'),13034427);
 // Exact game values are regression fixtures for one executable build.
 if (referenceSnapshot) {
+ const golbin=JSON.parse(run(`JSON.stringify(compileCombatEnemy(byKey.get('Enemy/Golbin'),${combatPlayer}))`));
+ assert.deepEqual(golbin.limits,[]);
+ assert.equal(golbin.profiles[0].hp,20);
+ assert.equal(golbin.profiles[0].interval,144);
+ assert.equal(golbin.profiles[0].enemyHit,1-640/(2*825));
+ assert.equal(golbin.profiles[0].attacks[0].hits[0].damage[0][2],8);
+ assert.equal(run('Object.fromEntries(combatDropExpectations(byKey.get("Enemy/Golbin").obj))["Item/StoneSword"]'),1/23);
+ assert.equal(run('Object.fromEntries(combatDropExpectations(byKey.get("Enemy/Golbin").obj))["Currency/GoldPieces"]'),25);
+ assert.ok(run(`compileCombatEnemy(byKey.get('Enemy/MangroveMantis'),${combatPlayer}).profiles[0].attacks.some(a=>a.hits.length>1)`));
+ assert.ok(run(`compileCombatEnemy(byKey.get('Enemy/Harpy'),${combatPlayer}).limits.some(limit=>limit.startsWith('攻击效果 '))`));
  const mining=shopPage.match(/<h3[^>]*><img[^>]*>采矿<\/h3>([^]*?)<\/section>/)?.[1];
  assert.ok(mining,'The shop should have a Mining category');
  assert.match(mining,/<h4[^>]*>采矿工具<\/h4>[^]*?ShopPurchase%2FCopperPickaxe"[^]*?<h4[^>]*>采矿常规升级<\/h4><p class="muted">暂无购买项目。<\/p>/);

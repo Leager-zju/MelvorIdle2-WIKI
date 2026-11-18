@@ -106,7 +106,7 @@ def build(unpacked=ROOT/'unpacked', output_dir=ROOT, report_path=ROOT/'extractio
     template = (ROOT/'template.html').read_text('utf-8')
     template = template.replace('__STYLE__', (ROOT/'style.css').read_text('utf-8'))
     template = template.replace('__LOGO__', icons[LOGO]).replace('__FAVICON__', icons[FAVICON])
-    template = template.replace('__APP__', '\n'.join((ROOT/name).read_text('utf-8') for name in ('app.js', 'player-format.js', 'features.js', 'wiki-ui.js', 'contents.js')))
+    template = template.replace('__APP__', '\n'.join((ROOT/name).read_text('utf-8') for name in ('app.js', 'player-format.js', 'features.js', 'combat-simulator.js', 'wiki-ui.js', 'contents.js')))
     assert template.count('__DATA__') == 1
     output = template.replace('__DATA__', encoded)
     (output_dir/'index.html').write_text(output, encoding='utf-8')

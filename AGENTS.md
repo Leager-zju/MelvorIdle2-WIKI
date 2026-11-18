@@ -24,11 +24,12 @@
 | `app.js` | 数据载入、条目索引、反向引用、搜索、通用字段渲染 `showEntry` |
 | `player-format.js` | 把原始数据转成玩家可读文字：`playerRender`、`eventText`、`humanWord` |
 | `features.js` | 加成（Boosts）、来源 / 用途索引、表格、技能页、参考表、工具、路由 |
+| `combat-simulator.js` | 战斗模拟内核、基础掉落期望、后台计算与模拟器界面 |
 | `wiki-ui.js` | 站点外壳：侧栏、导航框、条目页（信息框 + 导语）、首页、搜索 / 索引 / 链入页 |
 | `contents.js` | 右侧“本页目录” |
 | `verify.cjs` | 在 Node `vm` 中运行生成页的自动验证，写 `verification-report.json` |
 
-**JS 拼接顺序固定**：`app.js → player-format.js → features.js → wiki-ui.js → contents.js`（见 `build.py`）。所有文件共享一个全局作用域；后面的文件可以用前面的函数，函数声明会提升，但**顶层语句**只能依赖已执行的文件。新增文件必须同时加入 `build.py` 的列表。
+**JS 拼接顺序固定**：`app.js → player-format.js → features.js → combat-simulator.js → wiki-ui.js → contents.js`（见 `build.py`）。所有文件共享一个全局作用域；后面的文件可以用前面的函数，函数声明会提升，但**顶层语句**只能依赖已执行的文件。新增文件必须同时加入 `build.py` 的列表。
 
 **先改源码，再生成页面。** `index.html` 是构建产物，禁止直接编辑。数据提取、筛选和构建逻辑改对应的 Python 脚本，页面骨架改 `template.html`，渲染和交互改对应的 JavaScript，样式改 `style.css`。
 

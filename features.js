@@ -362,7 +362,7 @@ function routePage(key){
  if(route==='@search')return searchPage(id);if(route==='@links')return linksHerePage(id);if(route==='@index')return indexPage();
  if(route==='@boosts')return skillById.has(id)?showBoosts(id):showSkills();if(route==='@skill')return showSkill(id);if(route==='@table'&&types.includes(id))return browse(id);
  if(route==='@skills')return showSkills();if(route==='@equipment')return equipmentPage();if(route==='@combat')return combatPage();
- if(route==='@tools')return toolsPage();if(route==='@guides')return guidesPage();if(route==='@info')return infoPage();if(route==='@favorites')return showSaved();
+ if(route==='@tools')return toolsPage();if(route==='@combat-simulator')return combatSimulatorPage();if(route==='@guides')return guidesPage();if(route==='@info')return infoPage();if(route==='@favorites')return showSaved();
  wikiHome();
 }
 function navigate(key){if(decodeURIComponent(location.hash.slice(1))===key)routeWiki();else location.hash=encodeURIComponent(key);}
