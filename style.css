@@ -1,0 +1,131 @@
+
+:root{color-scheme:dark;--bg:#10151c;--panel:#19222d;--line:#2d3c4c;--text:#e2e9f1;--muted:#a5b7c9;--accent:#8bd6b4}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.65 system-ui,"Microsoft YaHei",sans-serif}h1{font-size:27px;margin:3px 0}h2{font-size:26px;margin:4px 0 10px}h3{font-size:18px;color:var(--accent);margin:26px 0 10px}h4{margin:12px 0 5px}p{margin:10px 0}.muted,small{color:var(--muted)}.badge{display:inline-block;background:#254238;color:#b5efd4;padding:2px 9px;border-radius:5px;font-size:11px;letter-spacing:.03em}input,select,button{font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:8px 11px}input{min-width:100px}input:focus,select:focus,button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}button,a{cursor:pointer}button:hover{background:#2b3d46}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}main{padding:20px 32px 40px;min-width:0}.entry{display:block;width:100%;text-align:left;margin:5px 0;padding:9px 11px;border-color:transparent;background:transparent}.entry small{display:block;font-size:11px;overflow-wrap:anywhere}.entry.active{border-color:var(--accent);background:#243e37}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin:24px 0}.stat{display:block;color:var(--text);padding:15px 18px;background:var(--panel);border:1px solid var(--line);border-radius:6px}.stat b{display:block;font-size:26px;color:var(--accent)}.note{border-left:3px solid #ceac6c;padding:10px 15px;background:#28261f;margin:18px 0}.data{margin:8px 0;width:100%;border-collapse:collapse}.data th,.data td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}.data th{width:150px;color:var(--muted);font-weight:400}.data .data th{width:115px}.data td{overflow-wrap:anywhere}ul{padding-left:21px}li{margin:6px 0}.code{font-family:Consolas,monospace;font-size:11px;color:var(--muted);overflow-wrap:anywhere}details{background:#151e28;padding:8px 12px;border-radius:5px;margin:8px 0}summary{cursor:pointer;color:var(--accent)}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}#count{padding:0 28px 9px;color:var(--muted);font-size:12px}.ref{margin:6px 0}.pill{display:inline-block;border:1px solid var(--line);border-radius:5px;padding:4px 10px;margin:3px}.empty{color:var(--muted);padding:15px}.en{display:block;font-size:12px;color:var(--muted)}.icon{object-fit:contain;vertical-align:middle;margin-right:8px;image-rendering:auto}.breadcrumb{color:var(--muted);font-size:12px;margin-bottom:10px}.pageactions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:10px 0}.title-icon{float:right}.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:5px;margin:8px 0 24px}.querytable{width:100%;border-collapse:collapse;min-width:620px;font-size:13px}.querytable>thead{background:#24343d}.querytable>thead th{padding:0;text-align:left;white-space:nowrap}.querytable>thead button{width:100%;text-align:left;border:0;background:transparent;color:#c7e9db;font-weight:600}.querytable>tbody>tr>td{padding:10px;border-top:1px solid var(--line);vertical-align:top;min-width:80px;max-width:600px;overflow-wrap:anywhere}.querytable>tbody>tr:nth-child(even){background:#141e28}.querytable>tbody>tr:hover{background:#1c2c32}.querytable .data{font-size:12px}.querytable .data th{width:110px}.querytable details{min-width:230px}.tabletools{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:12px;font-size:12px}.tabletools label{display:flex;align-items:center;gap:8px}.tabletools input{max-width:240px}.skillgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}.skillgrid article{background:var(--panel);border:1px solid var(--line);padding:15px;border-radius:6px}.skillgrid article h3{margin:7px 0}.skillgrid.compact{grid-template-columns:repeat(auto-fill,minmax(155px,1fr))}.skillgrid.compact article{padding:12px}.skillgrid.compact p{margin:5px 0 0;font-size:12px}.toc{display:flex;gap:7px;flex-wrap:wrap;border-block:1px solid var(--line);padding:12px 0;margin:15px 0}.toc a,.toc button{font-size:12px;padding:5px 9px;background:var(--panel);border-radius:4px}.hero-actions{display:flex;gap:12px;margin:20px 0}.hero-actions a{padding:12px 18px;background:#254238;border:1px solid #41695a;border-radius:6px}.boost-controls,.calcform{display:flex;gap:10px;flex-wrap:wrap;padding:15px;background:var(--panel);border:1px solid var(--line);border-radius:6px;margin:16px 0;align-items:end}.boost-controls label,.calcform label{display:flex;flex-direction:column;gap:5px;font-size:12px}.boost-controls .check{flex-direction:row;align-items:center;padding:8px}.check input{min-width:auto}.calcform select{max-width:340px}.calcform input{max-width:180px}section{scroll-margin-top:20px}hr{border:0;border-top:1px solid var(--line)}[hidden]{display:none!important}
+
+
+.boost-table{table-layout:fixed;min-width:0}.boost-table th:nth-child(1){width:16%}.boost-table th:nth-child(2){width:13%}.boost-table th:nth-child(3){width:31%}.boost-table th:nth-child(4){width:10%}.boost-table th:nth-child(5){width:30%}.boost-table details{min-width:0}.boost-table .data{table-layout:fixed}.boost-table td{word-break:normal}
+
+.gamefact{margin:5px 0}.factlabel{color:var(--muted)}.gamefact>ul{margin-top:4px}.gamefact>b{display:block;margin:8px 0 4px}
+
+.boost-section{margin:22px 0}
+summary{font-weight:600}
+main h2,main h3,main summary,section{scroll-margin-top:72px}
+
+
+
+/* ---- Wiki shell ---- */
+html{scroll-behavior:smooth}
+.topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:16px;padding:8px 20px;background:#0c1117f2;border-bottom:1px solid var(--line);backdrop-filter:blur(6px)}
+.logo{display:flex;align-items:center;gap:10px;color:var(--text);white-space:nowrap}
+.logo img{height:34px;width:auto}
+.logo span{font-size:13px;color:var(--muted);border-left:1px solid var(--line);padding-left:10px}
+.logo:hover{text-decoration:none}
+.searchbox{position:relative;flex:1;max-width:620px}
+.searchbox input{width:100%;padding:9px 14px;border-radius:20px;background:#17212b}
+.suggestions{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#17212b;border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 30px #000a;overflow:hidden}
+.suggestion{display:flex;align-items:center;gap:4px;padding:7px 12px;color:var(--text)}
+.suggestion small{display:block;font-size:11px}
+.suggestion:hover,.suggestion:focus{background:#22343b;text-decoration:none}
+.suggestion.all{border-top:1px solid var(--line);color:var(--accent);font-size:13px}
+.toplinks{display:flex;gap:14px;margin-left:auto;font-size:13px}
+.menu-toggle{display:none;padding:6px 11px}
+.layout{display:grid;grid-template-columns:210px minmax(0,1fr) 200px;align-items:start;max-width:1600px;margin:0 auto}
+body.no-toc .layout{grid-template-columns:210px minmax(0,1fr)}
+body.no-toc .page-contents{display:none}
+.wiki-nav{position:sticky;top:51px;max-height:calc(100vh - 51px);overflow-y:auto;padding:14px 10px 30px 18px;border-right:1px solid var(--line);font-size:13px}
+.nav-section h2{font-size:12px;color:var(--muted);margin:14px 0 4px;font-weight:600;letter-spacing:.04em}
+.nav-section ul{list-style:none;margin:0;padding:0}
+.nav-section li{margin:0}
+.nav-section a{display:inline-block;padding:3px 0;color:#bcd9f0}
+.nav-section a[aria-current]{color:var(--accent);font-weight:600}
+.nav-section .icon{margin-right:6px}
+.page-contents{position:sticky;top:51px;max-height:calc(100vh - 51px);overflow-y:auto;padding:20px 12px;border-left:1px solid var(--line)}
+.page-contents h2{font-size:14px;margin:0 0 10px}
+.page-contents nav{display:block}
+.page-contents button{display:block;width:100%;text-align:left;background:transparent;border:0;border-left:2px solid transparent;border-radius:0;padding:5px 10px;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.page-contents button:hover,.page-contents button[aria-current]{background:#20372f;color:var(--accent);border-left-color:var(--accent)}
+.page-contents button.nested{padding-left:20px}
+main h2{font-size:28px;font-weight:600;border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:12px}
+main h3{border-bottom:1px solid #22303d;padding-bottom:4px}
+.lead{font-size:15px}
+.clear{clear:both}
+.site-footer{border-top:1px solid var(--line);padding:18px 32px;font-size:12px;text-align:center}
+.site-footer p{margin:4px 0}
+
+/* Article infobox (right-floating, MediaWiki style) */
+.infobox{float:right;clear:right;width:290px;margin:0 0 16px 22px;border:1px solid var(--line);border-radius:6px;background:#151e28;border-collapse:separate;border-spacing:0;font-size:13px}
+.infobox caption{background:#24343d;font-weight:600;font-size:15px;padding:8px;border-radius:6px 6px 0 0;caption-side:top}
+.infobox th,.infobox td{padding:6px 10px;border-top:1px solid var(--line);vertical-align:top;text-align:left}
+.infobox th{width:84px;color:var(--muted);font-weight:400}
+.infobox ul{margin:0;padding-left:16px}
+.infobox li{margin:2px 0}
+.infobox-image{text-align:center;padding:14px!important}
+.infobox-image .icon{width:96px;height:96px;margin:0}
+.infobox-desc{font-style:italic;color:var(--muted);text-align:center!important}
+.statgrid{max-width:420px}
+.statgrid th{width:180px}
+
+/* Navbox */
+.navbox{clear:both;border:1px solid var(--line);border-radius:6px;margin:28px 0 8px;font-size:13px;background:#131c25}
+.navbox-title{background:#24343d;text-align:center;font-weight:600;padding:7px;border-radius:6px 6px 0 0}
+.navbox-row{display:grid;grid-template-columns:130px 1fr;border-top:1px solid var(--line)}
+.navbox-group{background:#1b2732;padding:7px 10px;font-weight:600;text-align:right;color:#c7e9db}
+.navbox-list{padding:7px 12px;line-height:2}
+.navbox-list.solo{border-top:1px solid var(--line)}
+.navbox-list .icon{margin-right:3px}
+.navbox .sep{color:var(--muted)}
+
+/* Main page */
+.home-title{border:0!important;font-size:30px}
+.summary .stat:hover{border-color:var(--accent);text-decoration:none}
+.home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:20px}
+.home-card{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:4px 18px 14px}
+.home-card h3{margin:12px 0 8px}
+.home-card ul{margin:6px 0}
+.featured{display:flex;gap:14px;align-items:flex-start}
+
+/* Search / index / links pages */
+.results{list-style:none;padding:0}
+.results li{display:flex;gap:6px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #22303d;margin:0}
+.results li a{font-size:15px}
+.results p{margin:3px 0 0;color:var(--muted);font-size:13px}
+.toc button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.indexgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.indexgrid a{display:block;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--text)}
+.indexgrid a:hover{border-color:var(--accent);text-decoration:none}
+.indexgrid small{display:block}
+.columns{columns:3 220px}
+
+@media(max-width:1200px){.layout{grid-template-columns:190px minmax(0,1fr)}.page-contents{display:none}}
+@media(max-width:820px){
+ .menu-toggle{display:block}
+ .logo span,.toplinks{display:none}
+ .topbar{padding:8px 12px;gap:10px}
+ .layout,body.no-toc .layout{display:block}
+ .wiki-nav{display:none;position:fixed;top:51px;left:0;bottom:0;width:260px;max-height:none;background:var(--bg);z-index:25;box-shadow:4px 0 20px #000a}
+ .wiki-nav.open{display:block}
+ main{padding:16px}
+ .infobox{float:none;width:100%;margin:0 0 16px}
+ .navbox-row{grid-template-columns:1fr}
+ .navbox-group{text-align:left}
+}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media print{
+ body{background:white;color:black}
+ .topbar,.wiki-nav,.page-contents,.site-footer,.pageactions,.tabletools,.boost-controls,.navbox{display:none}
+ .layout{display:block}
+ main{padding:0}
+ .tablewrap{overflow:visible}
+ .querytable{font-size:10px;min-width:0}
+ .infobox{background:white}
+ a,h2,h3{color:#164e37}
+}
+/* Long tables: fixed-height vertical scroll box; the header stays visible while scrolling. */
+.tablewrap.scroll{max-height:min(70vh,640px);overflow:auto;overscroll-behavior:contain}
+.tablewrap.scroll>.querytable>thead th{position:sticky;top:0;z-index:2;background:#24343d;box-shadow:0 1px 0 var(--line)}
+.tablewrap.scroll:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media print{.tablewrap.scroll{max-height:none;overflow:visible}.tablewrap.scroll>.querytable>thead th{position:static}}
+/* Per-skill sections inside a page that spans several skills */
+.skill-group-title{display:flex;align-items:center;gap:2px}
+h4.skill-group-title{margin:16px 0 4px;color:#c7e9db}
+.skill-group .tabletools{margin-top:4px}
+.or{color:var(--muted);font-weight:600;margin:0 2px}

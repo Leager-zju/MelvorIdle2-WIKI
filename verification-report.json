@@ -1,0 +1,110 @@
+{
+  "objects": 10938,
+  "modifiers": 2589,
+  "sources": 1832,
+  "effectGrants": 199,
+  "skills": 25,
+  "unscoped": 0,
+  "perSkill": {
+    "Agility": {
+      "modifiers": 110,
+      "sources": 77
+    },
+    "Beastcrafting": {
+      "modifiers": 80,
+      "sources": 52
+    },
+    "Cooking": {
+      "modifiers": 70,
+      "sources": 50
+    },
+    "Crafting": {
+      "modifiers": 69,
+      "sources": 48
+    },
+    "Farming": {
+      "modifiers": 90,
+      "sources": 70
+    },
+    "Firemaking": {
+      "modifiers": 77,
+      "sources": 46
+    },
+    "Fishing": {
+      "modifiers": 122,
+      "sources": 85
+    },
+    "Fletching": {
+      "modifiers": 82,
+      "sources": 54
+    },
+    "Herblore": {
+      "modifiers": 99,
+      "sources": 65
+    },
+    "Hunting": {
+      "modifiers": 304,
+      "sources": 170
+    },
+    "Mining": {
+      "modifiers": 116,
+      "sources": 87
+    },
+    "Runecrafting": {
+      "modifiers": 79,
+      "sources": 49
+    },
+    "Smithing": {
+      "modifiers": 65,
+      "sources": 45
+    },
+    "Thieving": {
+      "modifiers": 145,
+      "sources": 113
+    },
+    "Woodcutting": {
+      "modifiers": 124,
+      "sources": 83
+    },
+    "Ranching": {
+      "modifiers": 119,
+      "sources": 80
+    },
+    "Astrology": {
+      "modifiers": 75,
+      "sources": 47
+    },
+    "Attack": {
+      "modifiers": 956,
+      "sources": 651
+    },
+    "Strength": {
+      "modifiers": 954,
+      "sources": 648
+    },
+    "Defence": {
+      "modifiers": 1008,
+      "sources": 674
+    },
+    "Hitpoints": {
+      "modifiers": 999,
+      "sources": 667
+    },
+    "Ranged": {
+      "modifiers": 959,
+      "sources": 652
+    },
+    "Magic": {
+      "modifiers": 1039,
+      "sources": 703
+    },
+    "Prayer": {
+      "modifiers": 955,
+      "sources": 655
+    },
+    "Slayer": {
+      "modifiers": 950,
+      "sources": 648
+    }
+  }
+}
