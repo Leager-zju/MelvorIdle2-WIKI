@@ -1,4 +1,4 @@
-"""Build a self-contained offline reference from extracted game data."""
+"""Build the self-contained static wiki (index.html + assets/) from extracted game data."""
 import ast
 import hashlib
 import json

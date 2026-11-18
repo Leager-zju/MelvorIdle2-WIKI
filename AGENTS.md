@@ -1,12 +1,13 @@
-# AGENTS.md — Melvor Idle 2 离线 Wiki
+# AGENTS.md — Melvor Idle 2 中文 Wiki
 
 本文件写给在 `wiki/` 目录工作的开发者与 AI 代理。动手前通读一遍；规则冲突时以本文件为准，其次是 `README.md`。
 
 ## 1. 项目定位
 
-- 面向**真实玩家**的离线维基百科，参照 [Melvor Idle Wiki](https://wiki.melvoridle.com/w/Main_Page) 的站点结构与阅读体验。
-- 数据**只**来自本机安装包：`unpacked/Data/Packages/MelvorBase.json`（游戏数据）、`unpacked/Locale/zh_CN.po`（中文翻译）、`unpacked/project.binary`（游戏版本号）。
-- 交付物是单个 `index.html` + `assets/` 图片目录，双击即用：不联网、不需要服务器、不启动游戏。
+- 面向**真实玩家**的中文维基百科，参照 [Melvor Idle Wiki](https://wiki.melvoridle.com/w/Main_Page) 的站点结构与阅读体验。
+- 两种使用方式都要支持：通过 GitHub Pages **在线浏览**，以及下载后**离线使用**。界面文字以在线站点为主，不要把整站称为“离线 Wiki”；只在说明下载用法时提“离线”。
+- 数据**只**来自游戏安装包：`unpacked/Data/Packages/MelvorBase.json`（游戏数据）、`unpacked/Locale/zh_CN.po`（中文翻译）、`unpacked/project.binary`（游戏版本号）。面向玩家的文字说“游戏数据”，不说“本机”。
+- 交付物是单个 `index.html` + `assets/` 图片目录：静态文件，不依赖外部网络、服务器端或 CDN，双击也能用。
 - 不复制初代 Wiki 的正文、DLC 数据或平衡数值；不伪造二代不存在的系统（召唤、城镇等）。
 - 不做账户、多人编辑、修订历史、讨论区。
 - 不修改游戏安装文件、DLL 或存档；不执行游戏代码。
@@ -114,10 +115,10 @@ node wiki/verify.cjs   # 退出码必须为 0
 
 ### 4.2 站点外壳（参照 MediaWiki）
 
-- **顶栏**（sticky）：游戏 Logo + “离线 Wiki”、圆角搜索框（输入时下拉 10 条建议，精确名优先，同一技能只出现一次；回车：精确命中直达条目，否则进入 `@search`；`/` 聚焦）、随机条目、收藏。
+- **顶栏**（sticky）：游戏 Logo + “中文 Wiki”、圆角搜索框（输入时下拉 10 条建议，精确名优先，同一技能只出现一次；回车：精确命中直达条目，否则进入 `@search`；`/` 聚焦）、随机条目、收藏。
 - **左侧导航**（sticky，宽 210px）：导航 / 战斗 / 非战斗 / 被动（游戏自身 `LegacySidebarCategory` 分组，带技能图标）/ 参考表 / 工具。当前页用 `aria-current` 高亮。≤820px 收起为 ☰ 抽屉。
 - **右侧本页目录**（sticky，宽 200px）：自动收集正文 `h3`；少于 2 项时隐藏整栏；≤1200px 隐藏。
-- **页脚**：数据版本（`project.binary` 读出，如 v0.11.6）、条目数、非官方声明。
+- **页脚**：数据版本（`project.binary` 读出，如 v0.11.6）、条目数、非官方声明与版权说明（在线浏览 / 下载离线使用）。
 - 整页滚动（不要回到“各栏独立滚动”的布局）；锚点 `scroll-margin-top:72px` 以避开顶栏。
 
 ### 4.3 页面类型

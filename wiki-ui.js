@@ -32,7 +32,7 @@ function buildSidebar(){
   skillGroups.map(g=>section(esc(g.title),g.skills.map(s=>skillIcon(s.id,18)+skillLink(s.id)))).join('')+
   section('参考表',tableLinks.map(([t,n])=>pageLink(tableHref(t),n)))+
   section('工具',[pageLink('@tools','经验表与计算器'),pageLink('@equipment','装备对比'),pageLink('@favorites','收藏与最近浏览'),pageLink('@info','关于本 Wiki')]);
- $('footer').innerHTML='<p>Melvor Idle 2 离线 Wiki · 数据来自本机安装的游戏 <b>v'+esc(VERSION)+'</b> · 收录 '+fmt(entries.filter(e=>playerTypes.has(e.type)).length,0)+' 个条目</p><p class="muted">非官方玩家资料站，可完全离线使用。游戏内容与图像版权归 Games by Malcs 所有。数值为游戏基础配置，实际效果以游戏内为准。'+pageLink('@info','关于本 Wiki')+'</p>';
+ $('footer').innerHTML='<p>Melvor Idle 2 中文 Wiki · 数据来自游戏 <b>v'+esc(VERSION)+'</b> · 收录 '+fmt(entries.filter(e=>playerTypes.has(e.type)).length,0)+' 个条目</p><p class="muted">非官方玩家资料站，可在线浏览，也可下载后离线使用。游戏内容与图像版权归 Games by Malcs 所有。数值为游戏基础配置，实际效果以游戏内为准。'+pageLink('@info','关于本 Wiki')+'</p>';
 }
 
 // ---------- Articles ----------
@@ -127,8 +127,8 @@ function wikiHome(){
  const featured=items[Math.floor(Date.now()/864e5)%items.length];
  const starters=entries.filter(e=>/^(Skill|Combat)NavigationOption$/.test(e.type)).sort((a,b)=>(a.obj.Requirements?.length||0)-(b.obj.Requirements?.length||0)).slice(0,6);
  const card=(title,html)=>'<section class="home-card"><h3>'+title+'</h3>'+html+'</section>';
- $('detail').innerHTML='<h2 class="home-title">欢迎来到 Melvor Idle 2 离线 Wiki</h2>'+
-  '<p class="lead">这是一份根据本机安装的 <b>Melvor Idle 2 v'+esc(VERSION)+'</b> 游戏数据生成的玩家资料站，无需联网即可查询。目前收录 <b>'+fmt(G.Objects.Item.length,0)+'</b> 个物品、<b>'+fmt(G.Objects.Enemy.length,0)+'</b> 个敌人、<b>'+fmt(skillEntries.length,0)+'</b> 个技能和 <b>'+fmt(G.Objects.Quest.length,0)+'</b> 个任务。初次游玩请先阅读'+pageLink('@guides','新手指南')+'。</p>'+
+ $('detail').innerHTML='<h2 class="home-title">欢迎来到 Melvor Idle 2 中文 Wiki</h2>'+
+  '<p class="lead">这是一份根据 <b>Melvor Idle 2 v'+esc(VERSION)+'</b> 游戏数据整理的中文玩家资料站。目前收录 <b>'+fmt(G.Objects.Item.length,0)+'</b> 个物品、<b>'+fmt(G.Objects.Enemy.length,0)+'</b> 个敌人、<b>'+fmt(skillEntries.length,0)+'</b> 个技能和 <b>'+fmt(G.Objects.Quest.length,0)+'</b> 个任务。初次游玩请先阅读'+pageLink('@guides','新手指南')+'。</p>'+
   '<div class="summary">'+[['物品',G.Objects.Item.length,'@table/Item'],['敌人',G.Objects.Enemy.length,'@table/Enemy'],['技能',skillEntries.length,'@skills'],['任务',G.Objects.Quest.length,'@table/Quest']].map(([k,v,h])=>'<a class="stat" href="'+href(h)+'"><b>'+fmt(v,0)+'</b>'+k+'</a>').join('')+'</div>'+
   '<h3>主要导航</h3>'+mainNavbox()+
   '<div class="home-grid">'+
@@ -159,7 +159,7 @@ function linksHerePage(key){
 function afterRoute(key){
  const main=$('detail');
  if(key&&!key.startsWith('@links/'))main.insertAdjacentHTML('beforeend',mainNavbox());
- document.title=(key?(main.querySelector('h2')?.textContent||'Melvor Idle 2')+' - ':'')+'Melvor Idle 2 离线 Wiki';
+ document.title=(key?(main.querySelector('h2')?.textContent||'Melvor Idle 2')+' - ':'')+'Melvor Idle 2 中文 Wiki';
  const target=href(key);
  for(const a of $('wiki-nav').querySelectorAll('a')){if(a.getAttribute('href')===target)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');}
  $('wiki-nav').classList.remove('open');$('menu-toggle').setAttribute('aria-expanded','false');

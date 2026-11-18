@@ -20,6 +20,10 @@ assert.match(element('detail').innerHTML, /1,811/);
 assert.match(html, /<link rel="icon" href="assets\/[0-9a-f]+\.webp">/);
 assert.match(html, /<img src="assets\/[0-9a-f]+\.webp" alt="Melvor Idle 2">/);
 assert.match(element('footer').innerHTML, /v\d+\.\d+/);
+// Published online: the site is not branded "offline", and player text doesn't say "this machine".
+assert.doesNotMatch(html.slice(0,html.indexOf('<script')),/离线 Wiki/);
+for(const code of ['wikiHome()','infoPage()','toolsPage()']){vm.runInContext(code,context);assert.doesNotMatch(element('detail').innerHTML+element('footer').innerHTML,/离线 Wiki|本机/,code);}
+vm.runInContext('wikiHome()',context);
 assert.match(element('wiki-nav').innerHTML, /%40skill%2FWoodcutting/);
 assert.equal(vm.runInContext('entries.length', context), 10938);
 assert.equal(vm.runInContext('name(byKey.get("Item/StoneSword").obj,"Item")', context), '石制剑');
