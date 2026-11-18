@@ -1,5 +1,5 @@
 // Query pages use the installed game's data; no first-game balance values are copied.
-Object.assign(typeNames,{EquipmentSetBonus:'装备套装',ThievingDistraction:'扒窃干扰',ThievingHeistBonus:'扒窃劫案奖励',HuntingJournalBonus:'狩猎日志奖励',AstrologyBonusesEvent:'占星事件',RareBonusesEvent:'稀有事件',FiremakingBonfire:'篝火',RanchingEnclosureUpgrade:'围栏升级',TurnCountingEffect:'回合效果',StackingEffect:'叠加效果',AttackChargingEffect:'攻击充能效果',AttackCountingEffect:'攻击计数效果',AgilityTechnique:'敏捷技巧',FarmingCategory:'种植类别',RanchingAnimalVariant:'动物变种',CombatTriangleBonus:'战斗三角',ElementalBonus:'元素加成',OvergrowthEffect:'过度生长效果',RandomMagnitudeEffect:'随机强度效果',StunEffect:'眩晕效果',DamageOverTimeEffect:'持续伤害效果',AttackStance:'攻击姿态',Imbuement:'附魔'});
+Object.assign(typeNames,{EquipmentSetBonus:'装备套装',ThievingDistraction:'扒窃干扰',ThievingHeistBonus:'扒窃劫案奖励',HuntingJournalBonus:'狩猎日志奖励',AstrologyBonusesEvent:'占星事件',RareBonusesEvent:'稀有事件',RanchingEnclosureUpgrade:'围栏升级',TurnCountingEffect:'回合效果',StackingEffect:'叠加效果',AttackChargingEffect:'攻击充能效果',AttackCountingEffect:'攻击计数效果',AgilityTechnique:'敏捷技巧',FarmingCategory:'种植类别',RanchingAnimalVariant:'动物变种',CombatTriangleBonus:'战斗三角',ElementalBonus:'元素加成',OvergrowthEffect:'过度生长效果',RandomMagnitudeEffect:'随机强度效果',StunEffect:'眩晕效果',DamageOverTimeEffect:'持续伤害效果',AttackStance:'攻击姿态',Imbuement:'附魔'});
 Object.assign(labels,{LocalContext:'适用范围',FromContext:'经验 / 事件来源范围',Scaling:'动态缩放',StatGroup:'全局属性',StatsType:'属性系统',Modifiers:'修饰',UnlockLevel:'解锁等级',ItemCount:'套装件数',LinkedShopPurchase:'关联商店购买',UnlockKnowledge:'解锁知识',Duration:'持续时间',Turns:'回合',Charges:'充能',ConsumesOn:'消耗触发',Trigger:'触发方式',SecondaryRequirements:'额外条件',Slots:'槽位',CombatEffect:'战斗效果',Effects:'效果',Effect:'效果',BonusesWhenGrown:'成熟时加成',JournalModifierTemplate:'日志加成模板',BaitModifierTemplate:'诱饵加成模板',WateringModifierTemplate:'浇水加成模板'});
 const playerTypes=new Set(Object.keys(typeNames).filter(t=>!['RecipeCategory','RecipeSubcategory','FarmingCategory'].includes(t)));
 const fmt=(n,d=2)=>Number.isFinite(n)?n.toLocaleString('zh-CN',{maximumFractionDigits:d}):'—';
@@ -22,14 +22,14 @@ const skillName=id=>skillById.get(id)?.title||tr(id);
 const skillLink=id=>pageLink('@skill/'+id,skillName(id));
 const boostLink=id=>pageLink('@boosts/'+id,skillName(id)+' / Boosts');
 const skillConfig=id=>G.EntityConfig[G.Namespace+':'+id]||{};
-const sourceLabels={Item:'物品 / 装备 / 药水 / 食物',ShopPurchase:'商店升级',MasteryGuildBonus:'精通公会',AstrologyNode:'占星节点',AstrologyConstellation:'占星星座',Pet:'宠物',EquipmentSetBonus:'装备套装',FiremakingBonfire:'篝火',HuntingJournalBonus:'狩猎日志',ThievingDistraction:'扒窃干扰',ThievingHeistBonus:'劫案奖励',Prayer:'祈祷',CombatPassive:'战斗被动',FarmingRecipe:'成熟作物',FarmingCategory:'种植操作',HuntingAnimal:'诱饵 / 无陷阱狩猎',RanchingAnimalVariant:'动物变种'};
+const sourceLabels={Item:'物品 / 装备 / 药水 / 食物',ShopPurchase:'商店升级',MasteryGuildBonus:'精通公会',AstrologyNode:'占星节点',AstrologyConstellation:'占星星座',Pet:'宠物',EquipmentSetBonus:'装备套装',HuntingJournalBonus:'狩猎日志',ThievingDistraction:'扒窃干扰',ThievingHeistBonus:'劫案奖励',Prayer:'祈祷',CombatPassive:'战斗被动',FarmingRecipe:'成熟作物',FarmingCategory:'种植操作',HuntingAnimal:'诱饵 / 无陷阱狩猎',RanchingAnimalVariant:'动物变种'};
 function walk(value,callback,path='',ancestors=[]){
  if(!value||typeof value!=='object')return;
  callback(value,path,ancestors);
  for(const [k,v] of Object.entries(value))if(v&&typeof v==='object')walk(v,callback,path+(Array.isArray(value)?'['+k+']':(path?'.':'')+k),[...ancestors,value]);
 }
 function entityIds(value){const result=new Set();walk(value,o=>{if(!Array.isArray(o)&&typeof o.Entity==='string'&&skillById.has(shortId(o.Entity)))result.add(shortId(o.Entity));});return [...result];}
-const statsSkills={WoodcuttingAction:'Woodcutting',MiningAction:'Mining',FishingAction:'Fishing',FishingBait:'Fishing',FiremakingAction:'Firemaking',FiremakingBonfire:'Firemaking',CookingAction:'Cooking',FarmingAction:'Farming',RanchingAction:'Ranching',HuntingAction:'Hunting',HerbloreAction:'Herblore',Agility:'Agility',AstrologyAction:'Astrology',ThievingAction:'Thieving',SlayerTasks:'Slayer',Prayer:'Prayer',MagicSpell:'Magic',GrainMill:'Farming',GrainMillInventory:'Farming'};
+const statsSkills={WoodcuttingAction:'Woodcutting',MiningAction:'Mining',FishingAction:'Fishing',FishingBait:'Fishing',FiremakingAction:'Firemaking',CookingAction:'Cooking',FarmingAction:'Farming',RanchingAction:'Ranching',HuntingAction:'Hunting',HerbloreAction:'Herblore',Agility:'Agility',AstrologyAction:'Astrology',ThievingAction:'Thieving',SlayerTasks:'Slayer',Prayer:'Prayer',MagicSpell:'Magic',GrainMill:'Farming',GrainMillInventory:'Farming'};
 function modifierSkills(m){
  if(m.StatGroup)return skillEntries.map(s=>s.id);
  const type=shortId(m.Stat.StatsType),local=m.LocalContext||{};
@@ -302,7 +302,7 @@ function routePage(key){
  if(byKey.has(key))return showWikiEntry(key);
  const [route,...rest]=key.split('/'),id=rest.join('/');
  if(route==='@search')return searchPage(id);if(route==='@links')return linksHerePage(id);if(route==='@index')return indexPage();
- if(route==='@boosts')return skillById.has(id)?showBoosts(id):showSkills();if(route==='@skill')return showSkill(id);if(route==='@table')return browse(id);
+ if(route==='@boosts')return skillById.has(id)?showBoosts(id):showSkills();if(route==='@skill')return showSkill(id);if(route==='@table'&&types.includes(id))return browse(id);
  if(route==='@skills')return showSkills();if(route==='@equipment')return equipmentPage();if(route==='@combat')return combatPage();
  if(route==='@tools')return toolsPage();if(route==='@guides')return guidesPage();if(route==='@info')return infoPage();if(route==='@favorites')return showSaved();
  wikiHome();

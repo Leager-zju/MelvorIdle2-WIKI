@@ -25,7 +25,7 @@ assert.doesNotMatch(html.slice(0,html.indexOf('<script')),/离线 Wiki/);
 for(const code of ['wikiHome()','infoPage()','toolsPage()']){vm.runInContext(code,context);assert.doesNotMatch(element('detail').innerHTML+element('footer').innerHTML,/离线 Wiki|本机/,code);}
 vm.runInContext('wikiHome()',context);
 assert.match(element('wiki-nav').innerHTML, /%40skill%2FWoodcutting/);
-assert.equal(vm.runInContext('entries.length', context), 10938);
+assert.equal(vm.runInContext('entries.length', context), 10929);
 assert.equal(vm.runInContext('name(byKey.get("Item/StoneSword").obj,"Item")', context), '石制剑');
 element('search').value = 'Shrimp';
 vm.runInContext('updateList()',context);
@@ -60,6 +60,22 @@ assert.equal(vm.runInContext('esc("<img onerror=alert(1)>")',context),'&lt;img o
 // Render every object, not only the examples, to catch unusual structures.
 vm.runInContext('for (const e of entries) { render(e.obj); }',context,{timeout:60000});
 const run = code => vm.runInContext(code,context,{timeout:60000});
+assert.equal(run('byKey.has("FiremakingBonfire/Normal") || byKey.has("ShopPurchase/UnlockBonfire")'),false);
+assert.equal(run('skillConfig("Firemaking").Bonfires'),undefined);
+assert.equal(run('skillConfig("Shop").Purchases.some(p=>p.Id==="MelvorBase:UnlockBonfire")'),false);
+assert.equal(run('skillConfig("Firemaking").ValueStatistics.some(s=>s.Id.includes("Bonfire"))'),false);
+assert.equal(run('previewEntry(href("FiremakingBonfire/Normal"))'),undefined);
+assert.equal(run('searchEntries("普通篝火").length'),0);
+assert.equal(run('searchEntries("Unlock Bonfire").length'),0);
+assert.equal(run('searchEntries("生篝火烤野猪").some(e=>e.key==="Quest/MQ3")'),true);
+for(const key of ['FiremakingBonfire/Normal','ShopPurchase/UnlockBonfire','@table/FiremakingBonfire']){
+ run('routePage('+JSON.stringify(key)+')');
+ assert.match(element('detail').innerHTML,/欢迎来到/);
+}
+for(const code of ['indexPage()','browse("ShopPurchase")','showSkill("Firemaking")','showBoosts("Firemaking")','showBoosts("Woodcutting")']){
+ run(code);
+ assert.doesNotMatch(element('detail').innerHTML,/FiremakingBonfire|UnlockBonfire|解锁篝火|普通篝火|魔法树篝火/,code);
+}
 assert.match(html, /id="link-preview"[^>]*role="tooltip" hidden/);
 assert.equal(run('previewEntry(href("Item/NormalLog")).key'),'Item/NormalLog');
 assert.equal(run('previewEntry(href("@skill/Woodcutting")).obj.Entity'),'MelvorBase:Woodcutting');
@@ -112,18 +128,18 @@ assert.doesNotMatch(run('dataTable(["a"],Array.from({length:15},(_,i)=>[cell(i)]
 assert.match(run('boostCards(boostsFor("Thieving"))'),/id="boost-section-0"/);
 assert.match(run('boostRowsHtml(boostsFor("Thieving").filter(r=>r.key==="Item/GrapplingHook"))[0][4].html'),/<summary>抓钩 · 生效条件与获取途径/);
 assert.doesNotMatch(run('boostCards(boostsFor("Thieving"))'),/<details(?! open)/);
-assert.equal(run('boostRecords.length'),2589);
+assert.equal(run('boostRecords.length'),2566);
 assert.equal(run('effectGrants.length'),199);
-assert.equal(run('allBoostRecords.length'),2788);
+assert.equal(run('allBoostRecords.length'),2765);
 assert.equal(run('allBoostRecords.filter(r=>!r.skills.length).length'),0);
 assert.equal(run('boostsFor("Prayer").some(r=>r.key==="MasteryGuildBonus/PrayerRank4")'),true);
 assert.equal(run('boostsFor("Attack").some(r=>r.key==="Item/SnakeFangRing"&&!!r.m.Modifier)'),true);
-assert.equal(run('new Set(boostRecords.map(r=>r.key+"#"+r.path)).size'),2589);
+assert.equal(run('new Set(boostRecords.map(r=>r.key+"#"+r.path)).size'),2566);
 assert.equal(run('boostsFor("Thieving").some(r=>r.key==="Item/GrapplingHook")'),true);
 assert.equal(run('boostsFor("Woodcutting").some(r=>r.key==="AstrologyNode/DeedreeA1")'),true);
 assert.equal(run('boostsFor("Thieving").some(r=>r.key==="Item/TroutSushi")'),true);
 assert.equal(run('boostsFor("Thieving").some(r=>r.key==="ShopPurchase/Misdirection")'),true);
-assert.equal(run('boostsFor("Woodcutting").some(r=>r.m.StatGroup==="GlobalPercentXpGained")'),true);
+assert.equal(run('boostsFor("Woodcutting").some(r=>r.key==="AstrologyBonusesEvent/Aurora"&&r.m.StatGroup==="GlobalPercentActionInterval")'),true);
 assert.match(run('effectText(boostsFor("Thieving").find(r=>r.key==="Item/GrapplingHook"&&r.m.Stat.Name==="PercentInterval").m)'),/-1%/);
 assert.match(run('parentText(byKey.get("AstrologyNode/DeedreeA1"))'),/AstrologyConstellation%2FDeedree/);
 assert.equal(run('Math.abs(sourcesByItem.get("MelvorBase:StoneSword").find(r=>r.entry.key==="Enemy/Golbin").chance-1/23)<1e-12'),true);

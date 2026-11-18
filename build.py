@@ -84,6 +84,14 @@ def parse_po(text):
 
 def build():
     game = json.loads((ROOT/'unpacked/Data/Packages/MelvorBase.json').read_text('utf-8-sig'))
+    # The shop hides the bonfire unlock until Firemaking level 121 in this game version.
+    game['Objects'].pop('FiremakingBonfire', None)
+    game['Objects']['ShopPurchase'] = [o for o in game['Objects']['ShopPurchase'] if o['Id'] != 'UnlockBonfire']
+    shop = game['EntityConfig']['MelvorBase:Shop']
+    shop['Purchases'] = [r for r in shop['Purchases'] if r['Id'] != 'MelvorBase:UnlockBonfire']
+    firemaking = game['EntityConfig']['MelvorBase:Firemaking']
+    firemaking.pop('Bonfires', None)
+    firemaking['ValueStatistics'] = [r for r in firemaking['ValueStatistics'] if not r['Id'].startswith('MelvorBase:FiremakingBonfire')]
     translations = parse_po((ROOT/'unpacked/Locale/zh_CN.po').read_text('utf-8-sig'))
     assert translations[('', 'Local Save')] == '\u672c\u5730\u5b58\u6863'
     # Keep context-specific translations separate; ambiguous text falls back to English.
