@@ -60,6 +60,18 @@ assert.equal(vm.runInContext('esc("<img onerror=alert(1)>")',context),'&lt;img o
 // Render every object, not only the examples, to catch unusual structures.
 vm.runInContext('for (const e of entries) { render(e.obj); }',context,{timeout:60000});
 const run = code => vm.runInContext(code,context,{timeout:60000});
+assert.match(html, /id="link-preview"[^>]*role="tooltip" hidden/);
+assert.equal(run('previewEntry(href("Item/NormalLog")).key'),'Item/NormalLog');
+assert.equal(run('previewEntry(href("@skill/Woodcutting")).obj.Entity'),'MelvorBase:Woodcutting');
+assert.equal(run('previewEntry("#%")'),undefined);
+assert.equal(run('previewEntry(href("@table/Item"))'),undefined);
+assert.match(run('previewMarkup(byKey.get("Item/NormalLog"))'),/普通原木[\s\S]*Normal Log[\s\S]*<b>来源<\/b>[\s\S]*<b>用途<\/b>/);
+assert.match(run('previewMarkup(byKey.get("Item/SpikemossLeaf"))'),/<b>用途<\/b>[\s\S]*<b>使用效果<\/b>/);
+assert.match(run('previewMarkup({...byKey.get("Enemy/Golbin"),title:"<img>"})'),/&lt;img&gt;/);
+run('showWikiEntry("Item/SpikemossLeaf")');
+assert.match(element('detail').innerHTML,/<section id="item-uses">[\s\S]*?消耗数量[\s\S]*?<\/section>[\s\S]*?<h3>使用效果<\/h3>/);
+run('showWikiEntry("Item/GrapplingHook")');
+assert.match(element('detail').innerHTML,/<section id="item-uses"><h3>物品用途<\/h3><p class="muted">暂无已知的配方材料、费用或其他消耗记录。<\/p><\/section>[\s\S]*?<h3>使用效果<\/h3>/);
 assert.match(run('contentsMarkup([{id:"card-1",title:"经验与产出",nested:false}])'),/data-section-id="card-1"/);
 assert.match(run('contentsMarkup([{id:"card-1",title:"<img>",nested:false}])'),/\&lt;img\&gt;/);
 assert.doesNotMatch(run('contentsMarkup([{id:"card-1",title:"<img>",nested:false}])'),/<img>/);

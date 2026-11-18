@@ -129,3 +129,12 @@ main h3{border-bottom:1px solid #22303d;padding-bottom:4px}
 h4.skill-group-title{margin:16px 0 4px;color:#c7e9db}
 .skill-group .tabletools{margin-top:4px}
 .or{color:var(--muted);font-weight:600;margin:0 2px}
+
+.link-preview{position:fixed;z-index:40;width:min(320px,calc(100vw - 24px));padding:12px 14px;overflow:auto;overflow-wrap:anywhere;background:var(--panel);border:1px solid var(--line);border-radius:7px;box-shadow:0 6px 22px #0009;font-size:13px}
+.preview-title{display:flex;align-items:center;gap:9px}
+.preview-title .icon{flex:none;margin:0}
+.preview-title strong{color:var(--accent);font-size:15px}
+.preview-title small{display:block}
+.link-preview p{margin:7px 0 0}
+.link-preview p b{color:var(--muted)}
+@media print{.link-preview{display:none}}

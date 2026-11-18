@@ -252,7 +252,7 @@ function showSkill(id){
 }
 function relatedTable(e,kind){const id=G.Namespace+':'+e.obj.Id,opts={tag:'h4'};
  if(kind==='sources'){const rows=sourcesByItem.get(id)||[];return rows.length?skillSections(rows,r=>skillOfEntry(r.entry),part=>dataTable(['来源','获取方式','数量','基础概率','条件'],part.map(r=>[cell(r.entry.title,eLink(r.entry)),cell(r.basis),cell(r.min??'',quantity(r)),cell(r.chance??'',pct(r.chance)),cell('',gateText(r.entry))])),{...opts,other:'其他来源'}):'<p class="muted">暂无已知的直接获取途径。</p>';}
- const rows=[...new Map((usesByItem.get(id)||[]).map(r=>[r.entry.key,r])).values()];return rows.length?skillSections(rows,r=>skillOfEntry(r.entry),part=>dataTable(['用于','消耗数量','条件'],part.map(r=>[cell(r.entry.title,eLink(r.entry)),cell(r.quantity??'',fmt(r.quantity)),cell('',gateText(r.entry))])),{...opts,other:'其他用途'}):'<p class="muted">暂无已知的材料用途。装备和食用效果见下方说明。</p>';
+ const rows=[...new Map((usesByItem.get(id)||[]).map(r=>[r.entry.key,r])).values()];return rows.length?skillSections(rows,r=>skillOfEntry(r.entry),part=>dataTable(['用于','消耗数量','条件'],part.map(r=>[cell(r.entry.title,eLink(r.entry)),cell(r.quantity??'',fmt(r.quantity)),cell('',gateText(r.entry))])),{...opts,other:'其他用途'}):'<p class="muted">暂无已知的配方材料、费用或其他消耗记录。</p>';
 }
 function entryBoosts(e){const records=boostByOwner.get(e.key)||[];return records.length?'<h3>使用效果</h3><ul>'+records.map(r=>'<li>'+esc(effectText(r.m))+(r.m.Condition?'，需满足：'+render(r.m.Condition):'')+'</li>').join('')+'</ul>':'';}
 function browse(type){

@@ -156,7 +156,71 @@ function linksHerePage(key){
  $('detail').innerHTML='<div class="breadcrumb">'+link(e)+'</div><h2>链入页面：'+esc(e.title)+'</h2><p>以下 '+refs.length+' 个条目引用了“'+esc(e.title)+'”（包括同名的配方或技能目标）。</p>'+(refs.length?'<ul class="columns">'+refs.map(x=>'<li>'+eLink(x)+' <small>'+esc(typeNames[x.type]||x.type)+'</small></li>').join('')+'</ul>':'<p class="muted">没有其他条目引用此页。</p>');
 }
 
+function previewEntry(hash){
+ if(!hash?.startsWith('#'))return;
+ let key;try{key=decodeURIComponent(hash.slice(1));}catch{return;}
+ return byKey.get(key)||skillById.get(key.startsWith('@skill/')?key.slice(7):key)?.entry;
+}
+function previewMarkup(e){
+ const isItem=e.type==='Item',id=G.Namespace+':'+e.obj.Id;
+ const kind=isItem?itemKind(e):typeNames[e.type]||'条目';
+ const desc=plain(tr(e.obj.Description||e.obj.CustomDescription||''));
+ const row=(label,value)=>value?'<p><b>'+label+'</b> '+esc(value)+'</p>':'';
+ const titles=rows=>[...new Set((rows||[]).map(r=>r.entry.title))].slice(0,3).join('、');
+ return '<div class="preview-title">'+icon(e,40)+'<div><strong>'+esc(e.title)+'</strong><small>'+esc(kind+(e.en!==e.title?' · '+e.en:''))+'</small></div></div>'+
+  (desc?'<p>'+esc(desc)+'</p>':'')+(isItem?row('来源',titles(sourcesByItem.get(id)))+row('用途',titles(usesByItem.get(id)))+row('使用效果',(boostByOwner.get(e.key)||[]).slice(0,2).map(r=>effectText(r.m)).join('、')):'');
+}
+
+const linkPreview=$('link-preview');
+let previewLink,previewTimer;
+function hideLinkPreview(){
+ clearTimeout(previewTimer);
+ previewLink?.removeAttribute('aria-describedby');
+ previewLink=null;
+ linkPreview.hidden=true;
+}
+function queueLinkPreview(link){
+ if(link===previewLink)return;
+ hideLinkPreview();
+ const entry=previewEntry(link?.getAttribute('href'));
+ if(!entry)return;
+ previewLink=link;
+ previewTimer=setTimeout(()=>{
+  if(!link.isConnected)return hideLinkPreview();
+  linkPreview.innerHTML=previewMarkup(entry);
+  linkPreview.style.maxHeight='';
+  linkPreview.hidden=false;
+  const rect=link.getBoundingClientRect(),margin=8;
+  const viewport=document.documentElement;
+  const width=linkPreview.offsetWidth,height=linkPreview.offsetHeight;
+  const below=viewport.clientHeight-rect.bottom-margin,above=rect.top-margin;
+  const placeAbove=height>below&&above>below;
+  const available=Math.max(0,placeAbove?above:below);
+  linkPreview.style.maxHeight=available+'px';
+  linkPreview.style.left=Math.max(margin,Math.min(rect.left,viewport.clientWidth-width-margin))+'px';
+  linkPreview.style.top=(placeAbove?rect.top-linkPreview.offsetHeight:rect.bottom)+'px';
+  link.setAttribute('aria-describedby',linkPreview.id);
+ },300);
+}
+document.addEventListener('pointerover',event=>{
+ if(event.pointerType==='mouse'&&!linkPreview.contains(event.target))queueLinkPreview(event.target.closest('a[href^="#"]'));
+});
+document.addEventListener('pointerout',event=>{
+ if(event.pointerType!=='mouse'||!previewLink)return;
+ if((previewLink.contains(event.target)||linkPreview.contains(event.target))&&
+    !previewLink.contains(event.relatedTarget)&&!linkPreview.contains(event.relatedTarget))hideLinkPreview();
+});
+document.addEventListener('focusin',event=>{
+ if(event.target.matches('a[href^="#"]:focus-visible'))queueLinkPreview(event.target);
+});
+document.addEventListener('focusout',event=>{if(event.target===previewLink)hideLinkPreview();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape')hideLinkPreview();});
+window.addEventListener('scroll',event=>{if(event.target!==linkPreview)hideLinkPreview();},{capture:true,passive:true});
+window.addEventListener('resize',hideLinkPreview);
+document.addEventListener('click',hideLinkPreview);
+
 function afterRoute(key){
+ hideLinkPreview();
  const main=$('detail');
  if(key&&!key.startsWith('@links/'))main.insertAdjacentHTML('beforeend',mainNavbox());
  document.title=(key?(main.querySelector('h2')?.textContent||'Melvor Idle 2')+' - ':'')+'Melvor Idle 2 中文 Wiki';
