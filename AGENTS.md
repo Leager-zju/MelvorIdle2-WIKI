@@ -16,6 +16,7 @@
 
 | 文件 | 职责 |
 | --- | --- |
+| `update.py` | 从安装的 EXE 解包、构建并验证整个 Wiki，成功后替换生成产物 |
 | `extract.py` | 从 EXE 内 PCK 解包到 `unpacked/`（只支持未加密 PCK v3/v4） |
 | `build.py` | 读数据 / 翻译 / 版本，导出图标到 `assets/`，把 CSS 与 JS 内联进 `template.html`，生成 `index.html` |
 | `template.html` | 页面骨架：顶栏、左侧导航、正文、右侧目录、页脚 |

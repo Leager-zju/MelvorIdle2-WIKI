@@ -11,22 +11,23 @@ LOGO = 'res://Assets/Logos/Mi2_logo_horizontal_white_w800.png'
 FAVICON = 'res://Assets/Logo_V3_64.png'
 
 
-def game_version():
-    match = re.search(rb'application/config/version.{0,16}?(\d+(?:\.\d+)+)', (ROOT/'unpacked/project.binary').read_bytes(), re.S)
+def game_version(unpacked):
+    match = re.search(rb'application/config/version.{0,16}?(\d+(?:\.\d+)+)', (unpacked/'project.binary').read_bytes(), re.S)
     assert match, 'game version not found in project.binary'
     return match[1].decode()
 
 
-def load_icons(game):
+def load_icons(game, unpacked, assets):
     icons = {}
-    (ROOT/'assets').mkdir(exist_ok=True)
+    assets.mkdir(exist_ok=True)
+    unpacked = unpacked.resolve()
     paths = {o.get(k) for objects in game['Objects'].values() for o in objects
              for k in ('Icon', 'Media', 'Sprite') if isinstance(o.get(k), str)} | {LOGO, FAVICON}
     for path in sorted(paths):
         if not path.startswith('res://'):
             continue
-        source = ROOT/'unpacked'/path[6:]
-        if not source.resolve().is_relative_to((ROOT/'unpacked').resolve()):
+        source = unpacked/path[6:]
+        if not source.resolve().is_relative_to(unpacked):
             raise ValueError(path)
         imported = Path(str(source)+'.import')
         if not imported.exists():
@@ -34,8 +35,8 @@ def load_icons(game):
         match = re.search(r'^path="res://([^"]+)"', imported.read_text('utf-8'), re.M)
         if not match:
             continue
-        texture = (ROOT/'unpacked'/match[1]).resolve()
-        assert texture.is_relative_to((ROOT/'unpacked').resolve())
+        texture = (unpacked/match[1]).resolve()
+        assert texture.is_relative_to(unpacked)
         content = texture.read_bytes()
         if content[:4] != b'GST2' or len(content) < 56:
             continue
@@ -48,9 +49,8 @@ def load_icons(game):
         assert len(image) == size
         assert image.startswith(b'\x89PNG') if fmt == 1 else image[:4] == b'RIFF' and image[8:12] == b'WEBP'
         filename = hashlib.sha256(image).hexdigest()[:24]+('.png' if fmt == 1 else '.webp')
-        (ROOT/'assets'/filename).write_bytes(image)
+        (assets/filename).write_bytes(image)
         icons[path] = 'assets/'+filename
-    assert 'res://Assets/Items/StoneSword.png' in icons
     return icons
 
 
@@ -82,8 +82,8 @@ def parse_po(text):
     return result
 
 
-def build():
-    game = json.loads((ROOT/'unpacked/Data/Packages/MelvorBase.json').read_text('utf-8-sig'))
+def build(unpacked=ROOT/'unpacked', output_dir=ROOT, report_path=ROOT/'extraction-report.json'):
+    game = json.loads((unpacked/'Data/Packages/MelvorBase.json').read_text('utf-8-sig'))
     # The shop hides the bonfire unlock until Firemaking level 121 in this game version.
     game['Objects'].pop('FiremakingBonfire', None)
     game['Objects']['ShopPurchase'] = [o for o in game['Objects']['ShopPurchase'] if o['Id'] != 'UnlockBonfire']
@@ -92,15 +92,16 @@ def build():
     firemaking = game['EntityConfig']['MelvorBase:Firemaking']
     firemaking.pop('Bonfires', None)
     firemaking['ValueStatistics'] = [r for r in firemaking['ValueStatistics'] if not r['Id'].startswith('MelvorBase:FiremakingBonfire')]
-    translations = parse_po((ROOT/'unpacked/Locale/zh_CN.po').read_text('utf-8-sig'))
-    assert translations[('', 'Local Save')] == '\u672c\u5730\u5b58\u6863'
+    translations = parse_po((unpacked/'Locale/zh_CN.po').read_text('utf-8-sig'))
+    assert translations, 'no Chinese translations found'
     # Keep context-specific translations separate; ambiguous text falls back to English.
     plain = {key: value for (context, key), value in translations.items() if not context}
     contextual = {context+'\x04'+key: value for (context, key), value in translations.items() if context}
-    report = json.loads((ROOT/'extraction-report.json').read_text())
-    icons = load_icons(game)
+    report = json.loads(report_path.read_text(encoding='utf-8'))
+    icons = load_icons(game, unpacked, output_dir/'assets')
     assert LOGO in icons and FAVICON in icons
-    payload = {'game': game, 'translations': plain, 'contextual': contextual, 'report': report, 'icons': icons, 'version': game_version()}
+    version = game_version(unpacked)
+    payload = {'game': game, 'translations': plain, 'contextual': contextual, 'report': report, 'icons': icons, 'version': version}
     encoded = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).replace('<', '\\u003c')
     template = (ROOT/'template.html').read_text('utf-8')
     template = template.replace('__STYLE__', (ROOT/'style.css').read_text('utf-8'))
@@ -108,8 +109,9 @@ def build():
     template = template.replace('__APP__', '\n'.join((ROOT/name).read_text('utf-8') for name in ('app.js', 'player-format.js', 'features.js', 'wiki-ui.js', 'contents.js')))
     assert template.count('__DATA__') == 1
     output = template.replace('__DATA__', encoded)
-    (ROOT/'index.html').write_text(output, encoding='utf-8')
-    print(f'Built {sum(map(len, game["Objects"].values()))} entries; {len(translations)} translations; {len(icons)} icons; {len(output.encode())} bytes')
+    (output_dir/'index.html').write_text(output, encoding='utf-8')
+    print(f'Built {sum(map(len, game["Objects"].values()))} entries; {len(translations)} translations; {len(icons)} icons; {len(output.encode())} bytes', flush=True)
+    return version
 
 
 if __name__ == '__main__':

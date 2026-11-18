@@ -8,18 +8,18 @@ import json
 import mmap
 import struct
 
-ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / 'wiki' / 'unpacked'
+ROOT = Path(__file__).resolve().parent
+OUT = ROOT / 'unpacked'
 
-def safe_target(name):
+def safe_target(name, output=OUT):
     name = name.removeprefix('res://')
-    target = (OUT / name).resolve()
-    if not target.is_relative_to(OUT.resolve()) or ':' in name or '\\' in name:
+    target = (output / name).resolve()
+    if not target.is_relative_to(output.resolve()) or ':' in name or '\\' in name:
         raise ValueError(f'Unsafe resource path: {name!r}')
     return target
 
-def extract():
-    with (ROOT / 'Melvor2.exe').open('rb') as f:
+def extract(exe=ROOT.parent/'Melvor2.exe', output=OUT, report_path=ROOT/'extraction-report.json'):
+    with exe.open('rb') as f:
         with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as data:
             pe = struct.unpack_from('<I', data, 0x3c)[0]
             assert data[pe:pe+4] == b'PE\0\0'
@@ -48,7 +48,7 @@ def extract():
                 digest=bytes(data[pos:pos+16]); pos+=16
                 entry_flags=struct.unpack_from('<I',data,pos)[0];pos+=4
                 assert entry_flags == 0, f'Unsupported flags: {name}'
-                target=safe_target(name)
+                target=safe_target(name, output)
                 key=str(target).casefold();assert key not in seen, name;seen.add(key)
                 offset += start + base
                 assert start <= offset <= offset+size <= len(data), name
@@ -62,12 +62,12 @@ def extract():
                     'bytes':sum(e[3] for e in entries),'md5_verified':count,
                     'source_sha256':hashlib.sha256(data).hexdigest(),
                     'extensions':dict(collections.Counter(Path(e[0]).suffix for e in entries))}
-            (ROOT/'wiki'/'extraction-report.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
-            print(json.dumps(report,indent=2))
+            report_path.write_text(json.dumps(report,indent=2),encoding='utf-8')
+            return report
 
 if __name__ == '__main__':
     for bad in ('../escape','/escape','C:/escape','..\\escape'):
         try: safe_target(bad)
         except ValueError: pass
         else: raise AssertionError(bad)
-    extract()
+    print(json.dumps(extract(), indent=2))

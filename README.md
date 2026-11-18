@@ -62,15 +62,17 @@
 
 ## 更新与验证
 
-仓库不包含解包出的游戏文件（`unpacked/`，约 500 MB）。重建前把本仓库放在游戏安装目录下的 `wiki/`，再在安装目录运行；需要 Python，自动验证需要 Node.js：
+Steam 更新游戏后，在 `wiki/` 目录运行一条命令。需要 Python 3.10+ 和 Node.js：
 
 ```powershell
-python wiki/extract.py
-python wiki/build.py
-node wiki/verify.cjs
+python update.py
 ```
 
-重建会覆盖同名提取文件、图标与页面，请勿往 `unpacked/` 或 `assets/` 放个人文件。旧版被游戏移除的提取文件不会自动删除，Wiki 仅从本次核心 JSON 重建。资源提取器仅支持当前未加密 PCK v3/v4。
+默认读取上一级目录的 `Melvor2.exe`。Wiki 放在其他目录时，可以运行 `python update.py "D:\SteamLibrary\steamapps\common\Melvor Idle 2\Melvor2.exe"`。
+
+脚本从游戏安装包重新解包数据、中文翻译和图标，生成整站并运行验证。通过后更新 `index.html`、`assets/` 和两份报告。所有页面都由这个 `index.html` 生成，双击即可浏览；发布到 GitHub Pages 仍需提交并推送。验证失败时保留当前站点。新版会继续做整站验证，精确数值回归适用于原有的 v0.11.6 游戏快照。
+
+更新使用 `.wiki-update/` 临时目录，完成后自动清理。若进程被强制结束，确认没有更新在运行后，可移走残留的 `.wiki-update/` 再重试。原有的 `python extract.py`、`python build.py`、`node verify.cjs` 仍可用于分步维护，解包目录 `unpacked/` 由分步解包维护。提取器支持未加密的 PCK v3/v4。游戏如更改资源格式、字段结构或游戏机制，可能需要先调整脚本或 Wiki 逻辑。
 
 自动验证覆盖玩家展示无内部字段、Boosts 仅在技能详情页有入口、全部对象渲染、全部技能 / Boosts 页面、修饰与触发数量、来源链、中英文搜索、掉落权重、经验曲线、生产、对比、CSV 转义和输入边界，统计见 `verification-report.json`。浏览器已验收 Boosts 来源筛选、占星来源链、数值排序、经验与掉率计算及技能导航；未逐个在游戏中实测所有加成。
 
