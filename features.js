@@ -364,7 +364,6 @@ $('detail').addEventListener('click',event=>{
  if(target.dataset.export){const table=$(target.dataset.export),rows=[...table.rows].filter(r=>!r.hidden),csv='\ufeff'+rows.map(r=>[...r.cells].map(c=>csvValue(c.innerText)).join(',')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='Melvor2-'+target.dataset.export+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;}
  if(target.id==='boost-apply')return applyBoostFilters();
  if(target.id==='bookmark'){const key=target.dataset.key;favorites=favorites.includes(key)?favorites.filter(k=>k!==key):[...favorites,key];storage.set('favorites',favorites);target.textContent=favorites.includes(key)?'取消收藏':'收藏此页';return;}
- if(target.id==='print-page'){window.print();return;}
  if(target.id==='compare-run'){$('compare-result').innerHTML=compareEquipment($('compare-a').value,$('compare-b').value);return;}
  try{
   if(target.id==='xp-run'){const xp=Number($('xp-current').value),level=Number($('xp-target').value),rate=Number($('xp-rate').value);if(!Number.isFinite(xp)||xp<0||!Number.isFinite(rate)||rate<0)throw new Error('当前经验和每小时经验必须为非负数');const need=Math.max(0,xpForLevel(level)-xp);$('xp-result').textContent='目标累计 '+fmt(xpForLevel(level))+' XP；还需 '+fmt(need)+' XP'+(rate>0?'；约 '+fmt(need/rate)+' 小时':'；输入速率后可计算时间');}

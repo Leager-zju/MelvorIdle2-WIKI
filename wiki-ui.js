@@ -116,7 +116,7 @@ function showWikiEntry(key){
  const lead=isItem?itemLead(e):'<b>'+esc(e.title)+'</b>（'+esc(e.en)+'）是 Melvor Idle 2 中的'+esc(typeNames[e.type]||humanWord(e.type))+'。';
  const body=isItem?'<section id="item-sources"><h3>物品来源</h3>'+relatedTable(e,'sources')+'</section><section id="item-uses"><h3>物品用途</h3>'+relatedTable(e,'uses')+'</section>'+equipmentSection(e)+entryBoosts(e)+capabilitySections(e)+loot:loot+entryBoosts(e)+details;
  $('detail').innerHTML='<div class="breadcrumb">'+pageLink('','首页')+' › '+pageLink('@table/'+e.type,typeNames[e.type]||humanWord(e.type))+'</div><h2>'+esc(e.title)+'</h2>'+
-  '<div class="pageactions"><button id="bookmark" data-key="'+esc(key)+'">'+(favorites.includes(key)?'★ 取消收藏':'☆ 收藏此页')+'</button>'+pageLink('@links/'+key,'链入页面')+'<button id="print-page">打印 / 保存 PDF</button></div>'+
+  '<div class="pageactions"><button id="bookmark" data-key="'+esc(key)+'">'+(favorites.includes(key)?'★ 取消收藏':'☆ 收藏此页')+'</button>'+pageLink('@links/'+key,'链入页面')+'</div>'+
   infobox(e)+'<p class="lead">'+lead+'</p>'+body+'<div class="clear"></div>'+relatedNavbox(e);
  remember(key);
 }
