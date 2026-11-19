@@ -108,9 +108,9 @@ function capabilitySections(e){
 function showWikiEntry(key){
  const e=byKey.get(key);if(!e)return wikiHome();
  if(/NavigationOption$/.test(e.type)&&skillById.has(shortId(e.obj.Entity)))return showSkill(shortId(e.obj.Entity));
- const isItem=e.type==='Item',isMasteryTask=e.type==='MasteryGuildTask';
- showEntry(key,['Description','CustomDescription','SellsFor','Requirements','UnlockRequirements','BaseExperience','BaseInterval','BaseMinInterval','BaseMaxInterval',...(isItem?['Capabilities']:[]),...(e.type==='Enemy'?['Levels','Element','DamageType']:[]),...(isMasteryTask?['Goal']:[])]);
- const details=(isMasteryTask?'<section><h3>要求 / 目标</h3>'+masteryTaskObjectives(e)+'</section>':'')+$('detail').innerHTML;
+ const isItem=e.type==='Item',isMasteryTask=e.type==='MasteryGuildTask',isConstellation=e.type==='AstrologyConstellation';
+ showEntry(key,['Description','CustomDescription','SellsFor','Requirements','UnlockRequirements','BaseExperience','BaseInterval','BaseMinInterval','BaseMaxInterval',...(isItem?['Capabilities']:[]),...(e.type==='Enemy'?['Levels','Element','DamageType']:[]),...(isMasteryTask?['Goal']:[]),...(isConstellation?['MajorNodes','MinorNodes','MinorNodeUnlockKnowledge']:[])]);
+ const details=(isMasteryTask?'<section><h3>要求 / 目标</h3>'+masteryTaskObjectives(e)+'</section>':'')+$('detail').innerHTML+(isConstellation?constellationNodeSections(e):'');
  const drops=sourceRows.filter(r=>r.entry===e);
  const loot=drops.length?'<section><h3>'+(isItem?'开启可获得':'产出与掉落')+'</h3>'+dataTable(['产物','获取方式','数量','基础概率'],drops.map(r=>[cell(itemEntry(r.item)?.title||r.item,refLink(r.item,'Item')),cell(r.basis),cell(r.min??'',quantity(r)),cell(r.chance??'',pct(r.chance))]))+'</section>':'';
  const lead=isItem?itemLead(e):'<b>'+esc(e.title)+'</b>（'+esc(e.en)+'）是 Melvor Idle 2 中的'+esc(typeNames[e.type]||humanWord(e.type))+'。';

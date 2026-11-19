@@ -158,7 +158,7 @@ function skillDetailRows(list){
 function parentText(e){
  const parents=grantingParents(e);
  let text=parents.length?parents.map(p=>eLink(p)+'<div>'+gateText(p)+'</div>').join('<hr>'):'';
- if(e.type==='AstrologyNode')for(const p of parents){const idx=p.obj.MinorNodes?.indexOf(G.Namespace+':'+e.obj.Id);if(idx>=0)text+='<p>小节点顺序 '+(idx+1)+'；对应知识阈值：'+fmt(p.obj.MinorNodeUnlockKnowledge?.[idx])+'</p>';}
+ if(e.type==='AstrologyNode'&&parents.some(p=>p.obj.MinorNodes?.includes(G.Namespace+':'+e.obj.Id)))text+='<p>知识门槛取决于该星座已解锁的次要节点数量。</p>';
  for(const [id,c] of Object.entries(G.EntityConfig))for(const field of ['MasteryGuildBonuses','MasteryGuildRanks','Pets'])if(c[field]?.some(r=>r.Id===G.Namespace+':'+e.obj.Id))text+='<p>'+skillLink(shortId(id))+' · '+({MasteryGuildBonuses:'精通奖励',MasteryGuildRanks:'精通阶级',Pets:'宠物'})[field]+'</p>';
  return text;
 }
@@ -341,7 +341,22 @@ function relatedTable(e,kind){const id=G.Namespace+':'+e.obj.Id,opts={tag:'h4'};
  if(kind==='sources'){const rows=sourcesByItem.get(id)||[];return rows.length?skillSections(rows,r=>skillOfEntry(r.entry),part=>dataTable(['来源','获取方式','数量','基础概率','条件'],part.map(r=>[cell(r.entry.title,eLink(r.entry)),cell(r.basis),cell(r.min??'',quantity(r)),cell(r.chance??'',pct(r.chance)),cell('',gateText(r.entry))])),{...opts,other:'其他来源'}):'<p class="muted">暂无已知的直接获取途径。</p>';}
  const rows=[...new Map((usesByItem.get(id)||[]).map(r=>[r.entry.key,r])).values()];return rows.length?skillSections(rows,r=>skillOfEntry(r.entry),part=>dataTable(['用于','消耗数量','条件'],part.map(r=>[cell(r.entry.title,eLink(r.entry)),cell(r.quantity??'',fmt(r.quantity)),cell('',gateText(r.entry))])),{...opts,other:'其他用途'}):'<p class="muted">暂无已知的配方材料、费用或其他消耗记录。</p>';
 }
-function entryBoosts(e){const records=boostByOwner.get(e.key)||[];return records.length?'<h3>使用效果</h3><ul>'+records.map(r=>'<li>'+esc(effectText(r.m))+(r.m.Condition?'，需满足：'+render(r.m.Condition):'')+'</li>').join('')+'</ul>':'';}
+function entryEffectList(e){const records=boostByOwner.get(e.key)||[];return records.length?'<ul>'+records.map(r=>'<li>'+esc(effectText(r.m))+(r.m.Condition?'，需满足：'+render(r.m.Condition):'')+'</li>').join('')+'</ul>':'';}
+function entryBoosts(e){const effects=entryEffectList(e);return effects?'<h3>使用效果</h3>'+effects:'';}
+function constellationNodeSections(e){
+ const {MajorNodes,MinorNodes,MinorNodesPerMajorNode,MinorNodeUnlockKnowledge}=e.obj;
+ const notes=[MinorNodesPerMajorNode>0?'每解锁 '+fmt(MinorNodesPerMajorNode)+' 个次要节点，可解锁一个主要节点。':'',
+  MinorNodeUnlockKnowledge?.length?'各次解锁所需知识依次为 '+MinorNodeUnlockKnowledge.map(n=>fmt(n)).join('、')+'。':''];
+ return [[MajorNodes,'主要节点'],[MinorNodes,'次要节点']].map(([ids,title],i)=>{
+  if(!ids?.length)return '';
+  const rows=ids.map(id=>{
+   const node=byKey.get('AstrologyNode/'+shortId(id));
+   const effects=node?entryEffectList(node)+(node.obj.Description?'<p>'+render(node.obj.Description,'Description')+'</p>':''):'';
+   return [cell(node?.title, node?eLink(node):'—'),cell('',effects||'—'),cell('',node?gateText(node,'—'):'—')];
+  });
+  return '<section><h3>'+esc(title)+'</h3>'+(notes[i]?'<p class="muted">'+esc(notes[i])+'</p>':'')+dataTable(['节点','效果','额外解锁条件'],rows,'constellation-nodes-'+i,'constellation-nodes')+'</section>';
+ }).join('');
+}
 function shopSections(list,renderPart){
  const shop=skillConfig('Shop');
  const order=field=>new Map([...(shop[field]||[])].sort((a,b)=>a.Priority-b.Priority).map((r,i)=>[shortId(r.Id),i]));

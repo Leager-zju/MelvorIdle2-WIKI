@@ -453,6 +453,18 @@ if (referenceSnapshot) {
  assert.equal(run('boostsFor("Woodcutting").some(r=>r.key==="AstrologyBonusesEvent/Aurora"&&r.m.StatGroup==="GlobalPercentActionInterval")'),true);
  assert.match(run('effectText(boostsFor("Thieving").find(r=>r.key==="Item/GrapplingHook"&&r.m.Stat.Name==="PercentInterval").m)'),/-1%/);
  assert.match(run('parentText(byKey.get("AstrologyNode/DeedreeA1"))'),/AstrologyConstellation%2FDeedree/);
+ assert.match(run('parentText(byKey.get("AstrologyNode/DeedreeA1"))'),/取决于该星座已解锁的次要节点数量/);
+ const nodeRow=(html,id)=>html.match(new RegExp('<tr><td[^>]*>(?:<img[^>]*>)?<a href="#AstrologyNode%2F'+id+'"[^]*?<\\/tr>'))?.[0]||'';
+ run('routePage("AstrologyConstellation/Deedree")');
+ const deedree=element('detail').innerHTML;
+ assert.match(deedree,/<h3>主要节点<\/h3>[^]*?每解锁 4 个次要节点[^]*?<h3>次要节点<\/h3>[^]*?12、66、178/);
+ assert.match(nodeRow(deedree,'DeedreeMajor1'),/\+8%[^]*?\+1/);
+ assert.match(nodeRow(deedree,'DeedreeA1'),/\+2%/);
+ assert.match(nodeRow(deedree,'DeedreeA2'),/伐木<\/a> 等级 20/);
+ assertPlayerPage();
+ run('routePage("AstrologyConstellation/Ameria")');
+ assert.match(nodeRow(element('detail').innerHTML,'AmeriaMajor3'),/陨石雨/);
+ assertPlayerPage();
  assert.equal(run('Math.abs(sourcesByItem.get("MelvorBase:StoneSword").find(r=>r.entry.key==="Enemy/Golbin").chance-1/23)<1e-12'),true);
  assert.equal(run('sourcesByItem.get("MelvorBase:StoneSword").some(r=>r.entry.key==="ArtisanRecipe/StoneSword")'),true);
  assert.equal(run('usesByItem.get("MelvorBase:Stone").some(r=>r.entry.key==="ArtisanRecipe/StoneSword")'),true);
