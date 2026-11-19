@@ -128,7 +128,7 @@ function wikiHome(){
  const featured=items[Math.floor(Date.now()/864e5)%items.length];
  const starters=entries.filter(e=>/^(Skill|Combat)NavigationOption$/.test(e.type)).sort((a,b)=>(a.obj.Requirements?.length||0)-(b.obj.Requirements?.length||0)).slice(0,6);
  const card=(title,html)=>'<section class="home-card"><h3>'+title+'</h3>'+html+'</section>';
- $('detail').innerHTML='<h2 class="home-title">欢迎来到 Melvor Idle 2 中文 Wiki</h2>'+
+ $('detail').innerHTML='<h2 class="home-title">梅尔沃放置2 Wiki</h2>'+
   '<p class="lead">这是一份根据 <b>Melvor Idle 2 v'+esc(VERSION)+'</b> 游戏数据整理的中文玩家资料站。目前收录 <b>'+fmt(G.Objects.Item.length,0)+'</b> 个物品、<b>'+fmt(G.Objects.Enemy.length,0)+'</b> 个敌人、<b>'+fmt(skillEntries.length,0)+'</b> 个技能和 <b>'+fmt(G.Objects.Quest.length,0)+'</b> 个任务。初次游玩请先阅读'+pageLink('@guides','新手指南')+'。</p>'+
   '<div class="summary">'+[['物品',G.Objects.Item.length,'@table/Item'],['敌人',G.Objects.Enemy.length,'@table/Enemy'],['技能',skillEntries.length,'@skills'],['任务',G.Objects.Quest.length,'@table/Quest']].map(([k,v,h])=>'<a class="stat" href="'+href(h)+'"><b>'+fmt(v,0)+'</b>'+k+'</a>').join('')+'</div>'+
   '<h3>主要导航</h3>'+mainNavbox()+
@@ -225,7 +225,7 @@ function afterRoute(key){
  stopCombatSimulation();
  const main=$('detail');
  if(key&&!key.startsWith('@links/'))main.insertAdjacentHTML('beforeend',mainNavbox());
- document.title=(key?(main.querySelector('h2')?.textContent||'Melvor Idle 2')+' - ':'')+'Melvor Idle 2 中文 Wiki';
+ document.title=(key?(main.querySelector('h2')?.textContent||'Melvor Idle 2')+' - ':'')+'梅尔沃放置2 Wiki · Melvor Idle 2 中文维基';
  const target=href(key);
  for(const a of $('wiki-nav').querySelectorAll('a')){if(a.getAttribute('href')===target)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');}
  $('wiki-nav').classList.remove('open');$('menu-toggle').setAttribute('aria-expanded','false');

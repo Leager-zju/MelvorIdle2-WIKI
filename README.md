@@ -5,6 +5,8 @@
 - **在线访问**：<https://leager-zju.github.io/MelvorIdle2-WIKI/>
 - **离线使用**：下载本仓库，双击 `index.html` 用浏览器打开，无需联网或服务器。复制时同时带上 `index.html` 和 `assets/`。
 
+站点地图 [sitemap.xml](https://leager-zju.github.io/MelvorIdle2-WIKI/sitemap.xml) 提供首页的规范网址，供 Google Search Console、Bing Webmaster Tools 和百度搜索资源平台提交。
+
 游戏内容与图像版权归 Games by Malcs 所有。本站与官方无关，数值为游戏基础配置，实际效果以游戏内为准。
 
 ## 页面结构（参照 [Melvor Idle Wiki](https://wiki.melvoridle.com/w/Main_Page)）

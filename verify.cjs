@@ -25,6 +25,11 @@ const context = vm.createContext({document:{getElementById:element,createElement
   window:{addEventListener(){},scrollTo(){}},MutationObserver:class {observe(){}},location:{hash:'',replace(){}},setTimeout,clearTimeout,console,
   atob:s=>Buffer.from(s,'base64').toString('latin1'),TextDecoder,localStorage:{getItem(){return null;},setItem(){}}});
 vm.runInContext(scripts[1][1], context);
+assert.match(html, /<main id="detail"><h2 class="home-title">梅尔沃放置2 Wiki<\/h2>/);
+const canonical = html.match(/<link rel="canonical" href="([^"]+)">/)[1];
+const sitemap = fs.readFileSync(path.join(__dirname,'sitemap.xml'),'utf8');
+assert.deepEqual([...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map(match=>match[1]),[canonical]);
+assert.match(context.document.title,/^梅尔沃放置2 Wiki/);
 assert.match(html, /<link rel="icon" href="assets\/[0-9a-f]+\.(png|webp)">/);
 assert.match(html, /<img src="assets\/[0-9a-f]+\.(png|webp)" alt="Melvor Idle 2">/);
 assert.match(element('footer').innerHTML, /v\d+\.\d+/);
@@ -80,7 +85,7 @@ assert.equal(run('searchEntries("普通篝火").length'),0);
 assert.equal(run('searchEntries("Unlock Bonfire").length'),0);
 for(const key of ['FiremakingBonfire/Normal','ShopPurchase/UnlockBonfire','@table/FiremakingBonfire']){
  run('routePage('+JSON.stringify(key)+')');
- assert.match(element('detail').innerHTML,/欢迎来到/);
+ assert.match(element('detail').innerHTML,/梅尔沃放置2 Wiki/);
 }
 for(const code of ['indexPage()','browse("ShopPurchase")','showSkill("Firemaking")','showBoosts("Firemaking")','showBoosts("Woodcutting")']){
  run(code);
