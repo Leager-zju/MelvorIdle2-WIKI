@@ -2,6 +2,7 @@
 unpacked/
 .wiki-update/
 /.wiki-snapshot/
+/.wiki-steam/
 /_site/
 # Generated Wiki files for local previews and verification.
 /index.html

@@ -1,9 +1,21 @@
-name: Build and deploy Wiki
+name: Deploy verified Wiki
+run-name: Pages package ${{ inputs.asset_id }}
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Wiki source commit used by the Windows updater
+        required: true
+      asset_id:
+        description: Draft release asset ID of the offline ZIP
+        required: true
+      digest:
+        description: SHA-256 digest of the offline ZIP
+        required: true
+      build_id:
+        description: Installed Steam Build ID
+        required: true
 
 permissions:
   contents: read
@@ -14,28 +26,33 @@ concurrency:
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Check out the published v0.11.6 Wiki data
-        uses: actions/checkout@v6
-        with:
-          ref: 80948510e9ebf54b338d1cc8d51bd2cbcc1190eb
-          path: .wiki-snapshot
-          persist-credentials: false
-          sparse-checkout: |
-            /index.html
-            /assets/
-          sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-      - run: python publish.py .wiki-snapshot _site
+      - name: Verify the Windows build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          ASSET_ID: ${{ inputs.asset_id }}
+          DIGEST: ${{ inputs.digest }}
+          STEAM_BUILD: ${{ inputs.build_id }}
+        run: |
+          [[ "$SOURCE_SHA" == "$GITHUB_SHA" && "$ASSET_ID" =~ ^[0-9]+$ && "$STEAM_BUILD" =~ ^[0-9]+$ && "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" -H 'Accept: application/octet-stream' > "$RUNNER_TEMP/wiki.zip"
+          printf '%s  %s\n' "${DIGEST#sha256:}" "$RUNNER_TEMP/wiki.zip" | sha256sum -c -
+          echo "Steam Build ID: $STEAM_BUILD"
+          python publish.py --offline-zip "$RUNNER_TEMP/wiki.zip" _site
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
@@ -46,11 +63,16 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Check that this is still main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"
       - id: deployment
         uses: actions/deploy-pages@v4

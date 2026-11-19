@@ -1,5 +1,10 @@
 # 进行中的任务
 
+- `WIKI-STEAM-001` 用本机 Steam 在 `main` 推送后检查并更新游戏，验证后部署 Pages 和离线 ZIP。
+  - 状态：接入与验收中。执行端：已安装游戏的 Windows 电脑。更新：2026-11-19。分支：`main`（迁移基线 `a4a7faa`）。
+  - `[√]` 当前安装 Build ID `26724394`。SteamCMD 匿名下载正式版返回 `No subscription`。
+  - `[x]` 打通后台检查、Windows 构建和 Pages 部署，再切换发布触发方式。新版未就绪或验证失败时须保留线上发布。
+
 - `WIKI-SEO-001` 让玩家搜索「梅尔沃放置2 Wiki」时能找到 GitHub Pages 首页。
   - 状态：GitHub Pages 已上线，搜索引擎处理中。执行端：本机 Codex。更新：2026-11-19。分支：`main`（`f2b8d7b`）。
   - `[√]` 首页和 sitemap 公开访问均返回 HTTP 200，Google 站点所有权已验证，仅含首页的 sitemap 已登记。

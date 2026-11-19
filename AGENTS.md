@@ -19,7 +19,8 @@
 | `update.py` | 从安装的 EXE 解包、构建并验证整个 Wiki，成功后替换生成产物 |
 | `extract.py` | 从 EXE 内 PCK 解包到 `unpacked/`（只支持未加密 PCK v3/v4） |
 | `build.py` | 读数据 / 翻译 / 版本，导出图标到 `assets/`，把 CSS 与 JS 内联进 `template.html`，生成 `index.html` |
-| `publish.py` | 读取已发布快照中的数据与图标，使用当前源码构建、验证并打包 GitHub Pages 产物和离线 ZIP |
+| `publish.py` | 打包离线 ZIP，验证 Windows 端产物并准备 GitHub Pages 文件 |
+| `steam-publish.py` / `steam-bundle.py` | Windows 更新端轮询 `main`，核对 Steam Build ID，用该提交从当前安装构建成品并触发部署 |
 | `template.html` | 页面骨架：顶栏、左侧导航、正文、右侧目录、页脚 |
 | `style.css` | 全部样式 |
 | `app.js` | 数据载入、条目索引、反向引用、搜索、通用字段渲染 `showEntry` |
@@ -50,10 +51,10 @@ python update.py
 
 ### 发布（GitHub Pages）
 
-- 仓库 <https://github.com/Leager-zju/MelvorIdle2-WIKI>，`wiki/` 目录即仓库根。推送到 `main` 触发 `.github/workflows/pages.yml` 构建、验证并部署，站点 <https://leager-zju.github.io/MelvorIdle2-WIKI/>。
+- 仓库 <https://github.com/Leager-zju/MelvorIdle2-WIKI>，`wiki/` 目录即仓库根。Windows 更新端检测 `main` 推送并构建，`.github/workflows/pages.yml` 验证成品再部署，站点 <https://leager-zju.github.io/MelvorIdle2-WIKI/>。
 - 提交身份：`Leager <1004729740@qq.com>`（只在本仓库 `git config` 设置，不改全局）。
 - 生成的 `index.html`、`assets/`、离线 ZIP 和报告不提交到 Git。Pages 产物保留 `sitemap.xml` 和搜索引擎站点验证文件。
-- 工作流固定引用此前公开的 v0.11.6 Wiki 提交，只读取其中的数据和已发布图标。更新游戏数据时先确定有权限的构建输入来源，游戏原始文件不得上传。
+- Windows 更新端从 Steam 公开分支元数据取得目标 Build ID，并以已安装的 Steam manifest 确认更新完成。只上传已经验证的离线成品 ZIP 到专用草稿供 Actions 读取。游戏原始文件、解包目录和独立数据包不得上传。
 - `.gitignore` 排除 `unpacked/`（游戏解包文件，~500 MB）与 `mechanics-il.txt`（DLL 反汇编）——不得把游戏原始文件或反汇编提交到公开仓库。`.nojekyll` 必须保留。
 - 页面内只用相对路径（`assets/...`、`#...`），保证本地双击与 `/MelvorIdle2-WIKI/` 子路径下都能用。
 

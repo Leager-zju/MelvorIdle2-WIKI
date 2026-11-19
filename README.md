@@ -83,7 +83,9 @@ python update.py
 
 ### 发布 Wiki
 
-推送源码到 `main` 后，GitHub Actions 使用固定的已发布 v0.11.6 Wiki 快照作为构建输入，验证成功后部署 Pages，并更新同一地址下的离线 ZIP。生成文件无需提交。游戏升级时可在本地运行 `update.py` 验证，线上数据更新需要先确定有权限的输入来源。 [构建与部署记录](https://github.com/Leager-zju/MelvorIdle2-WIKI/actions/workflows/pages.yml)
+推送源码到 `main` 后，Windows 更新端检测最新提交并核对 Steam 公开分支的 Build ID。游戏有更新时由已登录的 Steam 客户端处理，安装完成后才生成 Wiki。成品通过本地验证后，GitHub Actions 再验证并部署 Pages，同时更新离线 ZIP。更新、构建或验证失败时，原发布继续服务。 [构建与部署记录](https://github.com/Leager-zju/MelvorIdle2-WIKI/actions/workflows/pages.yml)
+
+更新端使用 Windows 计划任务 `Melvor Idle 2 Wiki Publisher`，每分钟检查一次。Windows 用户需要登录，Steam 需要保持登录以处理游戏更新。游戏运行时，任务会等它退出再请求下载。可用 `python steam-publish.py --steam "D:\steam\steam.exe" --check` 检查 Steam 版本和 GitHub 连通性，日志在 `.wiki-steam/updater.log`。
 
 自动验证覆盖玩家展示无内部字段、Boosts 仅在技能详情页有入口、全部对象渲染、全部技能 / Boosts 页面、修饰与触发数量、来源链、中英文搜索、掉落权重、经验曲线、生产、对比、CSV 转义和输入边界，统计见 `verification-report.json`。浏览器已验收 Boosts 来源筛选、占星来源链、数值排序、经验与掉率计算及技能导航；未逐个在游戏中实测所有加成。
 
