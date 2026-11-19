@@ -279,6 +279,23 @@ for(const type of JSON.parse(run('JSON.stringify(types.filter(t=>/Recipe$/.test(
  assert.equal(run('entries.filter(e=>e.type==='+JSON.stringify(type)+').every(e=>{const v=recipeValue(e);return Number.isFinite(v)&&v>=0;})'),true,type);
 }
 run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,recipeValueColumns);
+assert.equal(run('huntingJournalLevel(29)'),1);
+assert.equal(run('huntingJournalLevel(30)'),2);
+assert.equal(run('huntingJournalLevel(57)'),3);
+assert.equal(run('huntingTrapDistribution(0,.2,0,0).failures'),Infinity);
+const changingTrap=JSON.parse(run('JSON.stringify(huntingTrapDistribution(.4,.2,.1,-.1))'));
+assert.ok(Math.abs(changingTrap.failures-1.06392)<1e-10);
+assert.ok(Math.abs(changingTrap.averageDouble-.11)<1e-10);
+assert.ok(Math.abs(run('huntingCaptureQuantity(2,1,1)')-1.3003125)<1e-10);
+for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
+ run(page);
+ const markup=element('detail').innerHTML;
+ assert.match(markup,/<h3>狩猎区域<\/h3>[^]*?<h4>[^]*?期望周期[^]*?单次掉落价值期望[^]*?每小时价值/);
+ const rows=[...markup.matchAll(/<tr><td[^>]*>(?:<img[^>]*>)?<a href="#HuntingAnimal%2F([^"]+)"/g)].map(m=>m[1]);
+ assert.equal(rows.length,run('G.Objects.HuntingAnimal.length'));
+ assert.equal(new Set(rows).size,rows.length);
+ assertPlayerPage();
+}
 // ---- Save import: build a small version-31 save the way the game writes it, then read it back. ----
 {
  const zlib=require('node:zlib');
@@ -290,7 +307,7 @@ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,recipeV
  i32(31);w.push(Buffer.alloc(16));str('Tester');str('Standard');i64(0);for(let k=0;k<4;k++)str('');i32(321);i64(0);i64(0);u8(0);
  const entity=(id,components)=>{str(ns+id);region(()=>{i32(components.length);for(const [cid,fill] of components){str(cid);region(fill);}});};
  const task=(id,goal,complete,trigger)=>{str(ns+id);region(()=>{u8(goal!==null?1:0);if(goal!==null){str(goal);region(()=>{f64(complete?200:0);u8(+complete);});}u8(+trigger);});};
- i32(6);
+ i32(7);
  entity('Woodcutting',[
   ['Experience',()=>f64(13034431)],// level 99
   ['Toolbelt',()=>{i32(1);str(ns+'WoodcuttingTool');region(()=>{i32(1);u8(1);str(ns+'ReinforcedWoodcuttersAxe');});}],
@@ -299,7 +316,13 @@ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,recipeV
   ['Unknown',()=>{i32(7);str('skipped by size');}]
  ]);
  entity('Ranching',[['MasteryGuild',()=>{u8(0);i32(2);task('RanchingTask201',null,false,true);task('RanchingTask202',null,false,false);}]]);
- entity('Shop',[['Shop',()=>{u8(1);u8(0);u8(1);i32(0);i32(0);i32(4);for(const [id,n] of [['WoodenAxeHandle',1],['OakAxeHandle',1],['Cheese',5],['BananaTreeSeed',50]]){i32(n);str(ns+id);}}]]);
+ entity('Shop',[['Shop',()=>{u8(1);u8(0);u8(1);i32(0);i32(0);i32(5);for(const [id,n] of [['WoodenAxeHandle',1],['OakAxeHandle',1],['Cheese',5],['BananaTreeSeed',50],['OakTrackingStick',1]]){i32(n);str(ns+id);}}]]);
+ entity('Hunting',[
+  ['Journal',()=>{i32(1);str(ns+'WildChicken');region(()=>{u8(1);f64(30);u8(0);f64(0);f64(0);});i32(0);i32(0);}],
+  ['Action',()=>{u8(0);u8(0);i32(0);i32(240);i32(0);i32(1);str(ns+'WildChicken');region(()=>{
+   i32(0);i32(0);i32(0);u8(1);str(ns+'ReinforcedSnare');u8(0);u8(0);i32(0);u8(1);i32(0);u8(0);i32(0);u8(0);
+  });u8(1);u8(0);u8(0);u8(0);u8(1);}]
+ ]);
  entity('Astrology',[['Action',()=>{u8(0);u8(1);i32(0);i32(166);i32(0);u8(0);u8(1);i32(2);str(ns+'Deedree');region(()=>{f64(10);i32(1);str(ns+'DeedreeA1');i32(0);});str(ns+'Hyden');region(()=>{f64(0);i32(0);i32(1);str(ns+'HydenMajor3');});}]]);
  entity('Combat',[
   ['Toolbelt',()=>{i32(1);str(ns+'CombatUtility');region(()=>{i32(1);u8(1);str(ns+'ScarabCharm');});}],
@@ -321,6 +344,7 @@ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,recipeV
  assert.deepEqual(save.tasks.Woodcutting,[ns+'WoodcuttingTask1']);
  assert.deepEqual(save.tasks.Ranching,[ns+'RanchingTask201']);
  assert.equal(save.shop[ns+'WoodenAxeHandle'],1);assert.deepEqual(save.astrology[ns+'Deedree'],[ns+'DeedreeA1']);
+ assert.deepEqual(save.hunting,{journal:{[ns+'WildChicken']:30},animals:{[ns+'WildChicken']:{trap:ns+'ReinforcedSnare',bait:true,trapless:false}}});
  assert.equal(run('saveLevel("Woodcutting",'+JSON.stringify(save)+')'),99);
  for(const bad of ['','not base64!','QUJD'])assert.throws(()=>run('decodeSaveString('+JSON.stringify(bad)+')'),bad);
  assert.throws(()=>run('parseSave(new Uint8Array([31,0,0,0]))'),/不完整|无法识别/);
@@ -330,6 +354,18 @@ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,recipeV
  assert.equal(base.xp,run('byKey.get("WoodcuttingRecipe/NormalTree").obj.BaseExperience'));
  run('playerSave=parseSave(decodeSaveString(SAVE_STRING));playerBoostsMemo=null');
  if(referenceSnapshot){
+  const hunt=withSave=>JSON.parse(run('JSON.stringify(huntingStats(byKey.get("HuntingAnimal/WildChicken"),'+(withSave?'playerSave':'null')+'))'));
+  const baseHunt=hunt(false),savedHunt=hunt(true);
+  assert.ok(Math.abs(baseHunt.ms-74500)<1e-7);
+  assert.ok(savedHunt.ms<baseHunt.ms&&savedHunt.value>baseHunt.value);
+  const mods=JSON.parse(run('JSON.stringify(huntingModifiers(byKey.get("HuntingAnimal/WildChicken"),playerSave,playerSave.hunting.animals["MelvorBase:WildChicken"]))'));
+  assert.equal(mods.level,2);
+  assert.equal(mods.totals.SkipTrackingStepChance,.02);
+  assert.equal(mods.totals.PercentTrappingInterval,-.1);
+  assert.equal(mods.failure.FlatTrappingSuccessChance,.05);
+  run('showSkill("Hunting")');
+  assert.match(element('detail').innerHTML,/期望周期（存档）[^]*?HuntingAnimal%2FWildChicken[^]*?Item%2FRawChicken[^]*?Item%2FGoldenEggCollectable[^]*?Item%2FSmallSurveyFindings/);
+  assertPlayerPage();
   const loot=JSON.parse(run('JSON.stringify(savedCombatLoot(playerSave))'));
   assert.deepEqual(loot,{ItemDoublingChance:.03,BuriableDoublingChance:.08,CurrencyDoublingChance:.1});
   const expected=25*1.1+2*1.03*1.08+119/23*1.03;

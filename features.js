@@ -332,12 +332,39 @@ function saveProgressList(type,list,renderList){
  updateSaveProgress=checked=>{option.hide=checked;$('save-progress-results').innerHTML=render();};
  return '<div class="tabletools"><label class="check"><input id="save-progress-hide" type="checkbox"'+(option.hide?' checked':'')+'> '+esc(option.label)+'</label>'+(option.note?'<small>'+esc(option.note)+'</small>':'')+'</div><div id="save-progress-results">'+render()+'</div>';
 }
+function huntingTables(animals){
+ const locations=(skillConfig('Hunting').Locations||[]).slice().sort((a,b)=>a.Priority-b.Priority);
+ const groups=new Map(locations.map(row=>[row.Id,[]]));
+ for(const e of animals){
+  if(!groups.has(e.obj.Location))groups.set(e.obj.Location,[]);
+  groups.get(e.obj.Location).push(e);
+ }
+ const saved=playerSave?'（存档）':'';
+ const headers=['动物','解锁条件','期望周期'+saved,'掉落物与期望数量'+saved,'单次掉落价值期望'+saved,'每小时价值'+saved];
+ const sections=[...groups].filter(([,entries])=>entries.length).map(([id,entries])=>{
+  const location=byKey.get('HuntingLocation/'+shortId(id));
+  const rows=entries.map(e=>{
+   const {ms,value,drops}=huntingStats(e,playerSave);
+   const canCatch=Number.isFinite(ms)&&ms>0,hourly=canCatch?value*3600000/ms:null;
+   const output=[...drops].map(([item,qty])=>refLink(item,'Item')+' × '+(qty<.01?'&lt;0.01':fmt(qty))).join('<br>');
+   return [cell(e.title,eLink(e)+'<small class="en">'+esc(e.en)+'</small>'),cell(levelOf(e.obj),gateText(e)),
+    cell(canCatch?ms:'',canCatch?fmt(ms/1000)+' 秒':'无法捕获'),cell('',output||'—'),
+    cell(canCatch?value:'',canCatch?fmt(value)+' 金币':'—'),cell(hourly??'',hourly==null?'—':fmt(hourly)+' 金币/小时')];
+  });
+  return '<h4>'+(location?icon(location,22)+esc(location.title):'未标注区域')+'</h4>'+dataTable(headers,rows);
+ }).join('');
+ const notes='周期按已发现动物、连续狩猎时每次成功捕获计算，包含调查、追踪和逃脱后的额外耗时。掉落包含调查收获和稀有物种，价值按售价计算。';
+ const basis=playerSave?'已计入可确认的长期加成、动物日志等级及存档选择的陷阱、诱饵和无陷阱模式。按补给充足估算，未计消耗成本和临时效果。'+
+  (!playerSave.hunting?'重新导入存档即可读取动物日志和狩猎设置。':''):'当前按日志 1 级、无加成陷阱和无诱饵估算。导入存档后会重新计算。';
+ return '<section><h3>狩猎区域</h3><p class="muted">'+notes+basis+'</p>'+sections+'</section>';
+}
 function showSkill(id){
  const s=skillById.get(id);if(!s){wikiHome();return;}current='';updateList();
  const recipes=configEntries(id,'Recipes');const tabs=['Animals','Courses','Constellations','MasteryGuildRanks','MasteryGuildTasks','Pets'];
  const sections=tabs.map(field=>{
   if(field==='MasteryGuildRanks')return masterySection(id);
   const list=configEntries(id,field);if(!list.length)return '';
+  if(field==='Animals'&&id==='Hunting')return huntingTables(list);
   const title={Animals:'动物',Courses:'敏捷路线',Constellations:'星座',MasteryGuildTasks:'精通任务',Pets:'宠物'}[field];
   const body=field==='MasteryGuildTasks'?saveProgressList('MasteryGuildTask',list,part=>dataTable(masteryTaskHeaders,skillDetailRows(part))):dataTable(skillDetailHeaders,skillDetailRows(list));
   return '<section><h3>'+esc(title)+' · '+list.length+'</h3>'+body+'</section>';
@@ -394,6 +421,10 @@ function browse(type){
  if(type==='MasteryGuildRank'||type==='MasteryGuildBonus')return masteryTablePage();
  if(type==='Enemy')return enemyAreaPage();
  const list=entries.filter(e=>e.type===type);current='';updateList();
+ if(type==='HuntingAnimal'){
+  $('detail').innerHTML='<h2>狩猎动物</h2>'+huntingTables(list);
+  return;
+ }
  let headers=['名称','分类','等级 / 条件','出售价格'],toRows=part=>part.map(e=>[cell(e.title,eLink(e)+'<small class="en">'+esc(e.en)+'</small>'),cell(shortId(e.obj.Category)||typeNames[type]||type,render(e.obj.Category||e.obj.Capabilities?.['MelvorBase:Equipment']?.Type||typeNames[type]||type)),cell(levelOf(e.obj),gateText(e)),cell(e.obj.SellsFor?.Quantity??'',e.obj.SellsFor?render(e.obj.SellsFor):'—')]);
  if(/Recipe$/.test(type)){headers=recipeHeaders;toRows=recipeRows;}
  if(type==='ShopPurchase'){headers=['商店项目','费用','解锁条件','提供'];toRows=part=>part.map(e=>[cell(e.title,eLink(e)),cell('',render(e.obj.Costs)),cell(levelOf(e.obj),gateText(e)),cell('',render(e.obj.Provides))]);}

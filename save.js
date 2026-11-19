@@ -49,7 +49,7 @@ function parseSave(bytes){
  if(version<SAVE_MIN_VERSION)throw new Error('存档版本 '+version+' 过旧，请在当前版本游戏中重新导出。');
  r.skip(16);const character=r.str();r.str();r.i64();for(let i=0;i<4;i++)r.str();
  const totalLevel=r.i32();r.i64();r.i64();r.bool();
- const save={version,character,totalLevel,xp:{},toolbelt:{},equipment:[],pets:{},tasks:{},shop:{},astrology:{}};
+ const save={version,character,totalLevel,xp:{},toolbelt:{},equipment:[],pets:{},tasks:{},shop:{},astrology:{},hunting:{journal:{},animals:{}}};
  const entities=r.count();
  for(let i=0;i<entities;i++){
   const entity=shortId(r.str());
@@ -85,6 +85,19 @@ function readSaveComponent(r,save,entity,component,end){
   r.bool();r.bool();r.bool();r.i32();r.i32();
   for(let n=r.count();n>0;n--){const amount=r.i32();save.shop[r.str()]=amount;}
  }else if(entity==='Astrology'&&component==='Action')readSaveAstrology(r,save);
+ else if(entity==='Hunting'&&component==='Journal'){
+  for(let n=r.count();n>0;n--){const id=r.str();r.region(()=>{r.bool();save.hunting.journal[id]=r.f64();});}
+ }else if(entity==='Hunting'&&component==='Action')readSaveHunting(r,save.hunting.animals);
+}
+
+function readSaveHunting(r,animals){
+ r.bool();r.bool();r.skip(12); // ActionComponent and TickTimer
+ for(let n=r.count();n>0;n--){const id=r.str();r.region(()=>{
+  r.skip(12);const trap=r.bool()?r.str():null;
+  r.bool();if(r.bool())r.str();
+  r.i32();const bait=r.bool();r.skip(9);
+  animals[id]={trap,bait,trapless:r.bool()};
+ });}
 }
 
 // AstrologyActionComponent: ActionComponent (IsStarted), TickTimer (bool + 3 × int32), two view flags,
@@ -215,6 +228,142 @@ function savedRecipeStats(e,save){
  const t=boostTotals(save,skill,e),double=1+Math.min(1,Math.max(0,t.doubling));
  const value=(recipeValue(e)*(1+t.percentQuantity)+t.quantity*primaryValue(e))*double;
  return {xp:xp==null?xp:xp*(1+t.xp),ms:recipeTime(e)?savedRecipeTime(e,t):null,value,applied:t.applied};
+}
+
+function huntingJournalLevel(xp){
+ const root=2**(1/7);
+ let level=1;
+ for(let next=2;next<=25;next++){
+  const threshold=Math.floor((next*next-next+100*(2**(next/3.5)-root)/(root-1))/12);
+  if(!(xp>=threshold))break;
+  level=next;
+ }
+ return level;
+}
+
+function huntingModifiers(e,save,setting){
+ const animal=e.obj,id=G.Namespace+':'+animal.Id;
+ const level=animal.LogToJournal?huntingJournalLevel(save?.hunting?.journal?.[id]):1;
+ const trapless=animal.EnableTrapless&&setting?.trapless;
+ const trap=trapless?null:itemEntry(setting?.trap)?.obj;
+ const cap=trap?.Capabilities?.[G.Namespace+':HuntingTrap'];
+ const compatible=cap?.TrapType===animal.TrapType?cap:null;
+ const totals={},failure={};
+ const scope={Animal:id,Location:animal.Location,Tool:animal.Tool,TrapType:animal.TrapType};
+ const add=(target,m,times)=>{
+  const global={GlobalFlatActionInterval:'Flat',GlobalPercentActionInterval:'Percent'}[m.StatGroup];
+  if(global){
+   for(const phase of ['Tracking','Trapping']){
+    const stat=global+phase+'Interval';target[stat]=(target[stat]||0)+m.Value*times;
+   }
+   return;
+  }
+  const ctx=m.LocalContext;
+  if(m.Stat?.StatsType!==G.Namespace+':HuntingAction'||ctx?.Component?.Entity!==G.Namespace+':Hunting'||ctx.Component.Component!=='Action'||
+     Object.entries(ctx).some(([k,v])=>k!=='Component'&&v!=null&&scope[k]!==v))return;
+  target[m.Stat.Name]=(target[m.Stat.Name]||0)+m.Value*times;
+ };
+ if(save){
+  for(const {m,times} of playerBoostsCache(save)){
+   const xpSkill=m.Scaling?.Data?.Experience;
+   if(!m.Scaling||xpSkill)add(totals,m,times*(xpSkill?saveLevel(shortId(xpSkill.Entity),save):1));
+  }
+  for(const {obj} of configEntries('Hunting','JournalLevelBonuses')){
+   if(obj.UnlockLevel<=level)for(const m of obj.JournalModifierTemplate||[])add(totals,m,1);
+  }
+  for(const m of (trapless?animal.TraplessBonuses:compatible?.TrapBonuses)||[])add(totals,m,1);
+  for(const m of compatible?.FailBonuses||[])add(failure,m,1);
+  if(setting?.bait)for(const m of animal.BaitModifierTemplate||[])add(totals,m,1);
+ }
+ return {level,totals,failure};
+}
+
+function huntingIntervalMean(low,high=low){
+ const tick=1000/60;
+ low=Math.max(tick,low);high=Math.max(low,high);
+ if(high===low)return combatKernel.ticks(low)*tick;
+ // Integrate the rounded timer over the continuous uniform interval.
+ const area=x=>{const n=Math.round(x);return n*(x-n/2);};
+ return (area(high/tick)-area(low/tick))/(high/tick-low/tick)*tick;
+}
+
+function huntingTrapDistribution(success,doubling,failChance,failDouble){
+ const chance=n=>Math.max(0,Math.min(1,n));
+ let remaining=1,failures=0,averageDouble=0;
+ for(let i=0;remaining>0;i++){
+  const p=chance(success+i*failChance),d=chance(doubling+i*failDouble);
+  if(p===0&&failChance<=0)return {failures:Infinity,averageDouble:0};
+  const fixedP=!failChance||p===1&&failChance>0;
+  const fixedD=!failDouble||d===0&&failDouble<0||d===1&&failDouble>0;
+  if(p===1||fixedP&&fixedD){
+   return {failures:failures+remaining*(1-p)/p,averageDouble:averageDouble+remaining*d};
+  }
+  averageDouble+=remaining*p*d;
+  remaining*=1-p;
+  failures+=remaining;
+ }
+ return {failures,averageDouble};
+}
+
+function huntingStats(e,save){
+ const o=e.obj,setting=save?.hunting?.animals?.[G.Namespace+':'+o.Id];
+ const {level,totals,failure}=huntingModifiers(e,save,setting);
+ const location=byKey.get('HuntingLocation/'+shortId(o.Location))?.obj;
+ const stat=key=>totals[key]||0;
+ const clamp=p=>Math.max(0,Math.min(1,p));
+ const modifyChance=(base,name)=>base*(1+stat('Increased'+name))+stat('Flat'+name);
+ const interval=(base,name,edge='')=>Math.floor((base+stat('Flat'+name)+(edge?stat('Flat'+edge+name):0))*
+  (1+stat('Percent'+name)+(edge?stat('Percent'+edge+name):0)));
+ const track=huntingIntervalMean(interval(o.BaseMinTrackInterval,'TrackingInterval','Min'),interval(o.BaseMaxTrackInterval,'TrackingInterval','Max'));
+ const trap=huntingIntervalMean(interval(o.BaseMinTrapInterval,'TrappingInterval','Min'),interval(o.BaseMaxTrapInterval,'TrappingInterval','Max'));
+ const survey=huntingIntervalMean(interval(location?.BaseSurveyInterval??0,'SurveyInterval'));
+ const miss=1-clamp(modifyChance(o.BaseTrackSuccessChance,'TrackingSuccessChance'));
+ const skip=clamp(stat('SkipTrackingStepChance'));
+ const min=Math.max(0,Math.floor(o.BaseMinTrackingSteps+stat('FlatTrackingSteps')+stat('FlatMinTrackingSteps')));
+ const max=Math.max(min,Math.floor(o.BaseMaxTrackingSteps+stat('FlatTrackingSteps')+stat('FlatMaxTrackingSteps')));
+ const steps=min===0?[0]:[0,1];
+ // With n steps remaining, a tick advances one step or skips one extra step.
+ for(let n=steps.length;n<=max;n++)steps[n]=1+(1-skip)*steps[n-1]+skip*(steps[n-2]??0);
+ const tracking=steps.slice(min).reduce((sum,n)=>sum+n,0)/(max-min+1);
+ const {failures,averageDouble}=huntingTrapDistribution(modifyChance(o.BaseTrapSuccessChance,'TrappingSuccessChance'),
+  stat('DoublingChance'),failure.FlatTrappingSuccessChance||0,failure.DoublingChance||0);
+ const retrack=(1-clamp(stat('TrappingReattemptChance')))*steps[min];
+ const ms=Number.isFinite(failures)?survey*(1+miss+miss*miss)+track*(tracking+failures*retrack)+trap*(1+failures):Infinity;
+
+ const drops=new Map(),addDrop=(id,qty)=>{if(qty>0)drops.set(id,(drops.get(id)||0)+qty);};
+ const quantity=p=>Math.max(1,Math.trunc((p.Quantity+stat('FlatProductQuantity'))*(1+stat('PercentProductQuantity'))));
+ const species=(o.RareSpecies||[]).filter(row=>row.Weight>0);
+ const rare=species.length?clamp(modifyChance(o.BaseRareSpeciesChance,'RareSpeciesChance')):0;
+ for(const p of o.Products||[]){
+  if(!p.Quantity||!p.Chance)continue;
+  const q=quantity(p);
+  const outcome=m=>huntingCaptureQuantity(q,m,level);
+  const ordinary=(1-averageDouble)*outcome(1)+averageDouble*outcome(2);
+  const uncommon=(1-averageDouble)*outcome(2)+averageDouble*outcome(4);
+  addDrop(p.Item,p.Chance*((1-rare)*ordinary+rare*uncommon));
+ }
+ const weight=species.reduce((sum,row)=>sum+row.Weight,0);
+ for(const row of species){
+  const extra=byKey.get('HuntingAnimalSpecies/'+shortId(row.Species))?.obj.ExtraProducts;
+  for(const p of extra||[])addDrop(p.Item,rare*row.Weight/weight*p.Chance*p.Quantity*(1+averageDouble));
+ }
+ const surveyDrops=(o.SurveyingProducts||[]).filter(p=>p.Quantity&&p.Chance);
+ const noSurveyDrop=surveyDrops.reduce((p,row)=>p*(1-row.Chance),1);
+ const nextSurvey=miss*noSurveyDrop;
+ for(const p of surveyDrops)addDrop(p.Item,(1+nextSurvey+nextSurvey*nextSurvey)*p.Chance*quantity(p)*(1+clamp(stat('DoublingChance'))));
+ const value=[...drops].reduce((sum,[id,qty])=>sum+qty*(itemEntry(id)?.obj.SellsFor?.Quantity||0),0);
+ return {ms,value,drops};
+}
+
+function huntingCaptureQuantity(quantity,multiplier,level){
+ // The mean of two uniform size/weight rolls has a triangular distribution.
+ const min=.5+level/100,width=.8,units=quantity*multiplier;
+ let expected=multiplier;
+ for(let n=multiplier+1;n<=units*(min+width);n++){
+  const x=Math.max(0,(n/units-min)/width);
+  expected+=x<.5?1-2*x*x:2*(1-x)**2;
+ }
+ return expected;
 }
 // Sell value of one unit of the main product (the item flat-quantity bonuses add to).
 function primaryValue(e){const r=sourceRows.find(r=>r.entry===e&&/主要|完成配方|每次砍倒|每次挖掘|普通钓鱼/.test(r.basis));return r?(itemEntry(r.item)?.obj.SellsFor?.Quantity||0)*(r.chance??1):0;}
