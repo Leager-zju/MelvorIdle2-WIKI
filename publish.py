@@ -53,7 +53,7 @@ def copy_site_metadata(output):
         shutil.copyfile(ROOT/name, output/name)
 
 
-def use_offline_package(package, output):
+def unpack_offline(package, output):
     output.mkdir()
     names = set()
     with ZipFile(package) as archive:
@@ -68,6 +68,12 @@ def use_offline_package(package, output):
             target = output/name
             target.parent.mkdir(exist_ok=True)
             target.write_bytes(data)
+    if 'index.html' not in names:
+        raise ValueError('Offline ZIP is missing index.html')
+
+
+def use_offline_package(package, output):
+    unpack_offline(package, output)
     verify_site(output)
     shutil.copyfile(package, output/'melvor-idle-2-wiki.zip')
     copy_site_metadata(output)

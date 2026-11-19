@@ -1,10 +1,10 @@
 """Run on the logged-in Windows Steam computer after pushes to main."""
 import argparse
 import contextlib
+import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -121,8 +121,13 @@ def main(steam, game, check_only):
         if process_running(game.name) or not process_running('steam.exe'):
             print('Waiting for the game to exit and Steam to be running', flush=True)
             return
+        if state.get('steam_requested') == target and time.time() - state.get('steam_time', 0) < 1800:
+            print('Waiting for the Steam update already requested', flush=True)
+            return
         subprocess.Popen([str(steam), '-silent', f'steam://validate/{APP_ID}'],
                          creationflags=subprocess.CREATE_NO_WINDOW)
+        state.update(steam_requested=target, steam_time=time.time())
+        save_state(state)
         print('Requested Steam to verify and update the installation', flush=True)
         return
     if not ready:
@@ -137,7 +142,8 @@ def main(steam, game, check_only):
         source = stage/'source'
         with ZipFile(source_zip) as archive:
             archive.extractall(source)
-        result = run(str(Path(sys.executable).with_name('python.exe')), str(source/'steam-bundle.py'), str(game), str(stage))
+        result = run(str(Path(sys.executable).with_name('python.exe')), str(source/'steam-bundle.py'),
+                     str(game), str(stage), target, str(STATE/'snapshot.zip'))
         print(result.stdout.strip(), flush=True)
         if installed_build(manifest) != (target, True) or latest_build() != target:
             raise RuntimeError('Steam Build ID changed during the build')
@@ -166,7 +172,10 @@ def upload_package(token, sha, package):
         if asset['name'] == name:
             request(API+f"/releases/assets/{asset['id']}", token, 'DELETE')
     upload = release['upload_url'].partition('{')[0]+'?'+urllib.parse.urlencode({'name': name})
-    asset = request(upload, token, 'POST', package.read_bytes(), 'application/zip')
+    data = package.read_bytes()
+    asset = request(upload, token, 'POST', data, 'application/zip')
+    if asset['digest'] != 'sha256:'+hashlib.sha256(data).hexdigest():
+        raise RuntimeError('The uploaded ZIP does not match the locally verified ZIP')
     return asset, release['id']
 
 
