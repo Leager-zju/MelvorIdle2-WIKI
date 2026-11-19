@@ -122,10 +122,21 @@ function showWikiEntry(key){
 }
 
 // ---------- Special pages ----------
+// Gold guide: gathering actions that only need a skill level (no materials, quest step, item or event), ranked by
+// expected gold per hour; each stage lists what unlocks within its level band. Uses the imported save's bonuses when present.
+const moneyStages=[['新手',1,19],['初期',20,39],['中期',40,59],['后期',60,79],['终盘',80,99]];
+const levelOnly=e=>!e.obj.Ingredients?.Items?.length&&!e.obj.DisplayRequirements?.length&&shortId(e.obj.Category)!=='Quests'&&[...(e.obj.Requirements||[]),...(e.obj.UnlockRequirements||[])].every(r=>shortId(r.Type)==='Level');
+function moneyGuide(){
+ const actions=entries.filter(e=>/Recipe$/.test(e.type)&&playerTypes.has(e.type)&&levelOnly(e))
+  .map(e=>{const s=savedRecipeStats(e,playerSave);return {e,level:levelOf(e.obj),gph:s.ms&&s.value?s.value*3600000/s.ms:0};}).filter(a=>a.gph>0);
+ return '<p class="muted">按'+(playerSave?'已导入存档的加成':'基础概率与出售价格')+'估算出售产物的每小时金币，只列达到等级即可进行、且不消耗材料的采集动作；未计失败、保留与额外掉落，仅供参考。</p>'+
+  moneyStages.map(([name,lo,hi])=>{
+   const best=actions.filter(a=>a.level>=lo&&a.level<=hi).sort((a,b)=>b.gph-a.gph).slice(0,3);
+   return best.length?'<h4>'+name+'（'+lo+'–'+hi+' 级）</h4><ul class="money-list">'+best.map(a=>'<li>'+eLink(a.e)+' <small>'+esc(skillName(recipeSkill(a.e)))+' '+a.level+' 级</small> · 约 <b>'+fmt(a.gph,0)+'</b> 金币/小时</li>').join('')+'</ul>':'';
+  }).join('')+pageLink('@guides','更多赚钱与材料规划 →');
+}
 function wikiHome(){
  current='';updateList();
- const items=entries.filter(e=>e.type==='Item'&&icon(e)&&sourcesByItem.has(G.Namespace+':'+e.obj.Id));
- const featured=items[Math.floor(Date.now()/864e5)%items.length];
  const starters=entries.filter(e=>/^(Skill|Combat)NavigationOption$/.test(e.type)).sort((a,b)=>(a.obj.Requirements?.length||0)-(b.obj.Requirements?.length||0)).slice(0,6);
  const card=(title,html)=>'<section class="home-card"><h3>'+title+'</h3>'+html+'</section>';
  $('detail').innerHTML='<h2 class="home-title">梅尔沃放置2 Wiki</h2>'+
@@ -134,7 +145,7 @@ function wikiHome(){
   '<h3>主要导航</h3>'+mainNavbox()+
   '<div class="home-grid">'+
   card('新手入门','<p>游戏开始时只有少数技能可用，其余技能需要达成等级或物品条件后解锁。</p><ul>'+starters.map(e=>'<li>'+eLink(e)+'：'+gateText(e)+'</li>').join('')+'</ul>'+pageLink('@guides','查看完整解锁路线 →'))+
-  card('今日推荐物品',featured?'<div class="featured">'+icon(featured,64)+'<div><b>'+link(featured)+'</b><p>'+itemLead(featured)+'</p></div></div>':'')+
+  card('各阶段金币获取指南',moneyGuide())+
   card('其他重要条目','<ul><li>'+pageLink('@guides','攻略与机制导航')+'</li><li>'+pageLink('@tools','经验表')+'：1–120 级所需经验</li><li>'+pageLink('@tools','计算工具')+'：升级时间、掉率、生产材料</li><li>'+pageLink('@equipment','装备对比')+'</li><li>'+pageLink('@index','全部条目索引')+'</li><li>'+pageLink('@info','关于本 Wiki')+'</li></ul>')+
   card('最近浏览',(recent.length?'<ul>'+recent.slice(0,8).map(k=>'<li>'+eLink(byKey.get(k))+'</li>').join('')+'</ul>':'<p class="muted">浏览过的条目会出现在这里。</p>')+(favorites.length?'<h4>收藏</h4>'+favorites.map(k=>'<span class="pill">'+eLink(byKey.get(k))+'</span>').join(''):''))+
   '</div>';

@@ -1,4 +1,5 @@
-// Player save import: decode an exported save string (Base64 → Brotli → binary) into the long-lasting
+// Player save import: decode a save file (.sav, Brotli → binary) or an exported save string (Base64 → Brotli →
+// binary) into the long-lasting
 // bonuses a player owns, then recompute the recipe table (XP, cycle time, expected product value).
 // Format read from the game's SaveReader / component ReadFrom IL (save version 31): every entity and
 // component is length-prefixed, so unknown parts are skipped by size.
@@ -25,18 +26,22 @@ function saveReader(bytes){
  return r;
 }
 
-// Base64 export string → raw save bytes. The game's Brotli stream omits its final empty block, so if a plain
-// decode fails, one "last, empty" meta-block byte (0x03) is appended and decoding is retried.
-function decodeSaveString(text){
- const clean=String(text||'').replace(/\s+/g,'');
- if(!clean)throw new Error('请粘贴游戏导出的存档字符串。');
- if(!/^[A-Za-z0-9+/]+={0,2}$/.test(clean)||clean.length%4)throw new Error('这不是有效的存档字符串：只能包含 Base64 字符。');
- let binary;try{binary=atob(clean);}catch{throw new Error('这不是有效的存档字符串：Base64 解码失败。');}
- const packed=new Uint8Array(binary.length+1);for(let i=0;i<binary.length;i++)packed[i]=binary.charCodeAt(i);packed[binary.length]=3;
- for(const input of [packed.subarray(0,binary.length),packed]){
+// Brotli-compressed save (a .sav / .bak file, or a Base64-decoded export string) → raw save bytes. The game's
+// Brotli stream omits its final empty block, so if a plain decode fails, one "last, empty" meta-block byte
+// (0x03) is appended and decoding is retried.
+function decompressSave(bytes){
+ const padded=new Uint8Array(bytes.length+1);padded.set(bytes);padded[bytes.length]=3;
+ for(const input of [padded.subarray(0,bytes.length),padded]){
   try{const raw=BrotliDecode(new Int8Array(input.buffer,input.byteOffset,input.length));return new Uint8Array(raw.buffer,raw.byteOffset,raw.byteLength);}catch{}
  }
- throw new Error('存档解压失败：请确认粘贴的是游戏“导出存档”得到的完整字符串。');
+ throw new Error('存档解压失败：请确认是游戏“导出存档”得到的完整字符串，或存档目录中的 .sav 文件。');
+}
+function decodeSaveString(text){
+ const clean=String(text||'').replace(/\s+/g,'');
+ if(!clean)throw new Error('请选择存档文件，或粘贴游戏导出的存档字符串。');
+ if(!/^[A-Za-z0-9+/]+={0,2}$/.test(clean)||clean.length%4)throw new Error('这不是有效的存档字符串：只能包含 Base64 字符。');
+ let binary;try{binary=atob(clean);}catch{throw new Error('这不是有效的存档字符串：Base64 解码失败。');}
+ return decompressSave(Uint8Array.from(binary,c=>c.charCodeAt(0)));
 }
 
 function parseSave(bytes){
@@ -195,7 +200,7 @@ function primaryValue(e){const r=sourceRows.find(r=>r.entry===e&&/主要|完成�
 
 // ---------- State ----------
 let playerSave=null;
-function loadPlayerSave(text){const save=parseSave(decodeSaveString(text));save.loadedAt=Date.now();playerSave=save;playerBoostsMemo=null;storage.set(SAVE_STORAGE_KEY,save);return save;}
+function loadPlayerSave(raw){const save=parseSave(raw);save.loadedAt=Date.now();playerSave=save;playerBoostsMemo=null;storage.set(SAVE_STORAGE_KEY,save);return save;}
 function clearPlayerSave(){playerSave=null;playerBoostsMemo=null;storage.set(SAVE_STORAGE_KEY,null);}
 function restorePlayerSave(){const s=storage.get(SAVE_STORAGE_KEY,null);if(s&&typeof s==='object'&&s.xp&&s.version>=SAVE_MIN_VERSION)playerSave=s;}
 function saveStatusText(){return playerSave?'当前存档：'+playerSave.character+' · 总等级 '+fmt(playerSave.totalLevel,0):'未导入存档，表格显示基础值。';}
@@ -208,9 +213,20 @@ function updateSaveControls(message){
 function toggleSavePanel(open=$('save-panel').hidden){$('save-panel').hidden=!open;$('save-toggle').setAttribute('aria-expanded',String(open));if(open)$('save-text').focus?.();}
 restorePlayerSave();
 $('save-toggle').addEventListener('click',()=>toggleSavePanel());
-$('save-import').addEventListener('click',()=>{
- try{const save=loadPlayerSave($('save-text').value);$('save-text').value='';updateSaveControls('已读取存档：'+save.character+' · 总等级 '+fmt(save.totalLevel,0));toggleSavePanel(false);routeWiki();}
+async function importSave(read){
+ try{const save=loadPlayerSave(await read());$('save-text').value='';updateSaveControls('已读取存档：'+save.character+' · 总等级 '+fmt(save.totalLevel,0));toggleSavePanel(false);routeWiki();}
  catch(error){updateSaveControls(error.message);}
+}
+$('save-import').addEventListener('click',()=>importSave(()=>decodeSaveString($('save-text').value)));
+// Browsers can't open the file dialog in a given folder, so copy the folder path for the dialog's address bar.
+const SAVE_DIR='%APPDATA%\\Games By Malcs\\Melvor Idle 2\\steam';
+$('save-dir').textContent=SAVE_DIR;
+$('save-pick').addEventListener('click',()=>{
+ // Start both inside the click: each needs the user's gesture, and awaiting the copy could get the dialog blocked.
+ Promise.resolve().then(()=>navigator.clipboard.writeText(SAVE_DIR))
+  .then(()=>updateSaveControls('已复制存档目录：在弹出窗口的地址栏按 Ctrl+V 再回车。'),()=>updateSaveControls('无法自动复制，请手动复制上方路径到弹出窗口的地址栏。'));
+ $('save-file').click();
 });
+$('save-file').addEventListener('change',event=>{const file=event.target.files[0];event.target.value='';if(file)importSave(async()=>decompressSave(new Uint8Array(await file.arrayBuffer())));});
 $('save-clear').addEventListener('click',()=>{clearPlayerSave();updateSaveControls('已清除存档，表格恢复基础值。');routeWiki();});
 updateSaveControls();

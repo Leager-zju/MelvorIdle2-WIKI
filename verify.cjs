@@ -37,6 +37,17 @@ assert.match(element('footer').innerHTML, /v\d+\.\d+/);
 assert.doesNotMatch(html.slice(0,html.indexOf('<script')),/离线 Wiki/);
 for(const code of ['wikiHome()','infoPage()','toolsPage()']){vm.runInContext(code,context);assert.doesNotMatch(element('detail').innerHTML+element('footer').innerHTML,/离线 Wiki|本机/,code);}
 vm.runInContext('wikiHome()',context);
+// Home: the gold guide replaced the featured item; each stage lists only level-gated, material-free actions in its band.
+assert.match(element('detail').innerHTML,/各阶段金币获取指南/);
+assert.doesNotMatch(element('detail').innerHTML,/今日推荐物品/);
+for(const [stage,lo,hi] of JSON.parse(vm.runInContext('JSON.stringify(moneyStages)',context))){
+ const section=(element('detail').innerHTML.split('<h4>'+stage+'（')[1]||'').split('</ul>')[0];
+ assert.ok(section,stage);
+ for(const [,key] of section.matchAll(/href="#([^"]+)"/g)){
+  const k=JSON.stringify(decodeURIComponent(key)),level=vm.runInContext('levelOf(byKey.get('+k+').obj)',context);
+  assert.ok(level>=lo&&level<=hi,stage+' '+k);assert.ok(vm.runInContext('levelOnly(byKey.get('+k+'))',context),k);
+ }
+}
 assert.match(element('wiki-nav').innerHTML, /%40skill%2FWoodcutting/);
 // Placeholder outputs (zero chance / zero quantity) must not appear as item sources.
 assert.equal(vm.runInContext('sourceRows.some(r=>r.chance===0||r.max===0)',context),false);
@@ -257,9 +268,14 @@ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/产物
  entity('Shop',[['Shop',()=>{u8(1);u8(0);u8(1);i32(0);i32(0);i32(2);i32(1);str(ns+'WoodenAxeHandle');i32(1);str(ns+'OakAxeHandle');}]]);
  entity('Astrology',[['Action',()=>{u8(0);u8(1);i32(0);i32(166);i32(0);u8(0);u8(1);i32(1);str(ns+'Deedree');region(()=>{f64(10);i32(1);str(ns+'DeedreeA1');i32(0);});}]]);
  entity('NotAnEntity',[['Anything',()=>{f64(1);}]]);
- const raw=Buffer.concat(w),exported=zlib.brotliCompressSync(raw).toString('base64');
+ const raw=Buffer.concat(w),packed=zlib.brotliCompressSync(raw),exported=packed.toString('base64');
  context.SAVE_STRING=exported;
  const save=JSON.parse(run('JSON.stringify(parseSave(decodeSaveString(SAVE_STRING)))'));
+ // A .sav file is the same Brotli stream without Base64 (the game also omits the final empty block).
+ context.SAVE_FILE=new Uint8Array(packed);
+ assert.deepEqual(JSON.parse(run('JSON.stringify(parseSave(decompressSave(SAVE_FILE)))')),save);
+ assert.throws(()=>run('decompressSave(new Uint8Array([1,2,3]))'),/解压失败/);
+ assert.equal(element('save-dir').textContent,'%APPDATA%\\Games By Malcs\\Melvor Idle 2\\steam');// matches the Steam save folder
  assert.equal(save.version,31);assert.equal(save.character,'Tester');assert.equal(save.totalLevel,321);
  assert.equal(save.toolbelt.Woodcutting[ns+'WoodcuttingTool'].item,ns+'ReinforcedWoodcuttersAxe');
  assert.deepEqual(save.pets.Woodcutting,[]);// locked pet
