@@ -111,6 +111,18 @@ assert.equal(run('previewEntry(href("@table/Item"))'),undefined);
 assert.match(run('contentsMarkup([{id:"card-1",title:"经验与产出",nested:false}])'),/data-section-id="card-1"/);
 assert.match(run('contentsMarkup([{id:"card-1",title:"<img>",nested:false}])'),/\&lt;img\&gt;/);
 assert.doesNotMatch(run('contentsMarkup([{id:"card-1",title:"<img>",nested:false}])'),/<img>/);
+{
+ const main=element('detail'),queried=main.querySelectorAll;
+ const heading=(tagName,id,textContent,inTable=false)=>({tagName,id,textContent,closest:s=>inTable&&s.includes('table')?{}:null,getClientRects:()=>[]});
+ const group=heading('H3','enemy-CombatAreas','战斗区域'),area=heading('H4','','哥布林森林'),tableHeading=heading('H4','','表内标题',true);
+ main.querySelectorAll=selector=>selector==='h3, h4, details > summary'?[group,area,tableHeading]:selector==='[id]'?[group,{id:'page-section-1'}]:[];
+ context.document.documentElement={scrollHeight:1000};
+ run('syncPageContents()');
+ assert.match(element('page-toc').innerHTML,/data-section-id="enemy-CombatAreas">战斗区域<\/button>[^]*?data-section-id="page-section-2" class="nested">哥布林森林<\/button>/);
+ assert.doesNotMatch(element('page-toc').innerHTML,/表内标题/);
+ main.querySelectorAll=queried;
+ run('syncPageContents()');
+}
 // Mastery ranks and their rewards are one merged table.
 run('showSkill("Attack")');
 assert.doesNotMatch(element('detail').innerHTML,/<h3>精通奖励/);
@@ -306,6 +318,8 @@ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/产物
   assert.equal(run('savedCombatLoot({...playerSave,equipment:[],toolbelt:{Combat:{CombatUtility:{item:"MelvorBase:SlayerChallengeContract",qty:1}}}}).ItemDoublingChance'),0);
   run('routePage("@table/Enemy")');
   assert.match(element('detail').innerHTML,/单次击杀价值期望（存档）/);
+  assert.match(element('detail').innerHTML,/Currency%2FGoldPieces"[^]*?× 10–40 <span class="drop-chance">100%/);
+  assert.match(element('detail').innerHTML,/存档翻倍计入价值期望/);
   assert.ok(element('detail').innerHTML.includes('>'+run('fmt('+expected+')')+' 金币</td>'));
   assertPlayerPage();
  }
@@ -369,6 +383,9 @@ if (referenceSnapshot) {
  assert.equal(golbin.profiles[0].attacks[0].hits[0].damage[0][2],8);
  assert.equal(run('Object.fromEntries(combatDropExpectations(byKey.get("Enemy/Golbin").obj))["Item/StoneSword"]'),1/23);
  assert.equal(run('Object.fromEntries(combatDropExpectations(byKey.get("Enemy/Golbin").obj))["Currency/GoldPieces"]'),25);
+ assert.deepEqual(JSON.parse(run('JSON.stringify(combatDropRows(byKey.get("Enemy/GolbinScout").obj).find(r=>r.key==="Item/StoneArrows"))')),{
+  key:'Item/StoneArrows',min:1,max:3,chance:.21875
+ });
  assert.ok(Math.abs(run('combatDropValue(combatDropExpectations(byKey.get("Enemy/Golbin").obj))')-(27+119/23))<1e-12);
  assert.ok(run(`compileCombatEnemy(byKey.get('Enemy/MangroveMantis'),${combatPlayer}).profiles[0].attacks.some(a=>a.hits.length>1)`));
  assert.ok(run(`compileCombatEnemy(byKey.get('Enemy/Harpy'),${combatPlayer}).limits.some(limit=>limit.startsWith('攻击效果 '))`));
@@ -436,6 +453,8 @@ if (referenceSnapshot) {
  assert.deepEqual([...enemyPage.matchAll(/<section id="enemy-[^"]+"><h3>([^<]+)<\/h3>/g)].map(m=>m[1]),['战斗区域','屠杀者区域','黑暗区域','地下城']);
  const enemyGroup=id=>enemyPage.match(new RegExp('<section id="enemy-'+id+'">[^]*?<\\/section>'))?.[0]||'';
  assert.match(enemyGroup('CombatAreas'),/CombatArea%2FGolbinForest[^]*?Enemy%2FGolbin[^]*?Item%2FStoneSword[^]*?32\.17 金币/);
+ assert.match(enemyGroup('CombatAreas'),/Item%2FStoneArrows"[^]*?× 1–3 <span class="drop-chance">21\.88%/);
+ assert.match(enemyGroup('CombatAreas'),/Item%2FStoneSword"[^]*?× 1 <span class="drop-chance">4\.35%/);
  assert.match(enemyGroup('SlayerZones'),/CombatArea%2FSlimeForest[^]*?Enemy%2FGreenSlime/);
  assert.match(enemyGroup('DarkAreas'),/CombatArea%2FDrearyBarrens[^]*?Enemy%2FVampire/);
  assert.match(enemyGroup('Dungeons'),/Dungeon%2FHobgolbinCamp[^]*?Enemy%2FGolbin[^]*?<td data-value="">—<\/td><td data-value="0">0 金币<\/td>/);

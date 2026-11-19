@@ -110,17 +110,11 @@ function createCombatKernel(){
 
 const combatKernel=createCombatKernel();
 
-function combatDropExpectations(enemy,bonus={}){
- const totals=new Map(),bundle=enemy.Drops||{};
+function combatDropRows(enemy){
+ const rows=[],bundle=enemy.Drops||{};
  function add(type,id,row,chance){
   const min=row.MinQuantity??row.Quantity,max=row.MaxQuantity??row.Quantity??min;
-  const item=type==='Item'?itemEntry(id):null;
-  const multiplier=type==='Currency'?1+(bonus.CurrencyDoublingChance||0):
-   (1+(bonus.ItemDoublingChance||0))*(1+(item?.obj.Capabilities?.[G.Namespace+':Bury']?(bonus.BuriableDoublingChance||0):0));
-  const quantity=(min+max)/2*chance*multiplier;
-  if(!id||!Number.isFinite(quantity)||quantity<=0)return;
-  const key=type+'/'+shortId(id);
-  totals.set(key,(totals.get(key)||0)+quantity);
+  if(id&&Number.isFinite(min)&&Number.isFinite(max)&&max>0&&Number.isFinite(chance)&&chance>0)rows.push({key:type+'/'+shortId(id),min,max,chance});
  }
  for(const row of bundle.FixedItems||[])add('Item',row.Item,row,1);
  for(const row of bundle.FixedCurrencies||[])add('Currency',row.Currency,row,1);
@@ -128,8 +122,20 @@ function combatDropExpectations(enemy,bonus={}){
   const weight=(table.Table||[]).reduce((sum,row)=>sum+(row.Weight||0),0);
   if(weight>0)for(const row of table.Table)add('Item',row.Item,row,table.Chance*row.Weight/weight);
  }
+ return rows;
+}
+
+function combatDropTotals(rows,bonus={}){
+ const totals=new Map();
+ for(const {key,min,max,chance} of rows){
+  const bury=byKey.get(key)?.obj.Capabilities?.[G.Namespace+':Bury'];
+  const multiplier=key.startsWith('Currency/')?1+(bonus.CurrencyDoublingChance||0):
+   (1+(bonus.ItemDoublingChance||0))*(1+(bury?(bonus.BuriableDoublingChance||0):0));
+  totals.set(key,(totals.get(key)||0)+(min+max)/2*chance*multiplier);
+ }
  return [...totals];
 }
+function combatDropExpectations(enemy,bonus){return combatDropTotals(combatDropRows(enemy),bonus);}
 
 function combatDropValue(drops){
  return drops.reduce((sum,[key,qty])=>{
@@ -146,15 +152,15 @@ function enemyAreaPage(){
  const list=entries.filter(e=>e.type==='Enemy');
  function table(enemies,dungeon=false){
   const rows=enemies.map(e=>{
-   const drops=dungeon?[]:combatDropExpectations(e.obj,loot),value=combatDropValue(drops);
-   const items=drops.length?'<ul>'+drops.map(([key,qty])=>{
-    const item=byKey.get(key);
-    return '<li>'+(item?icon(item,18)+link(item):'—')+' <span class="drop-quantity">× '+(qty<.005?'&lt;0.01':fmt(qty))+'</span></li>';
+   const drops=dungeon?[]:combatDropRows(e.obj),value=combatDropValue(combatDropTotals(drops,loot));
+   const items=drops.length?'<ul>'+drops.map(row=>{
+    const item=byKey.get(row.key),chance=row.chance<.00005?'&lt;0.01%':pct(row.chance);
+    return '<li><span>'+(item?icon(item,18)+link(item):'—')+'</span> <span class="drop-roll">× '+quantity(row)+' <span class="drop-chance">'+chance+'</span></span></li>';
    }).join('')+'</ul>':'—';
    const levels=(e.obj.Levels||[]).map(r=>skillLink(shortId(r.Key))+' '+fmt(r.Value));
    return [cell(e.title,eLink(e)+'<small class="en">'+esc(e.en)+'</small>'),cell('',items),cell(value,fmt(value)+' 金币'),cell('',(levels.length?levels.join('、')+'<br>':'')+render(e.obj.Element))];
   });
-  return dataTable(['敌人','掉落物与期望数量','单次击杀价值期望'+(playerSave?'（存档）':''),'等级属性与元素'],rows,undefined,'enemy-area-table');
+  return dataTable(['敌人','掉落物、数量与概率','单次击杀价值期望'+(playerSave?'（存档）':''),'等级属性与元素'],rows,undefined,'enemy-area-table');
  }
  for(const area of configEntries('Combat','Areas')){
   if(area.type!=='CombatArea'&&area.type!=='Dungeon')continue;
@@ -169,7 +175,7 @@ function enemyAreaPage(){
  const other=list.filter(e=>!seen.has(e.key));
  if(other.length)sections.get('CombatAreas').push('<h4>未标注区域</h4>'+table(other));
  const summary=playerSave?'<p class="muted">存档已计入可确认的翻倍几率：物品 '+pct(loot.ItemDoublingChance)+'、可埋葬物额外 '+pct(loot.BuriableDoublingChance)+'、金币 '+pct(loot.CurrencyDoublingChance)+'。临时效果和屠杀任务等有条件的加成未计入。'+(!playerSave.equipment?'重新导入旧存档后可计入当前战斗装备。':'')+'</p>':'';
- $('detail').innerHTML='<h2>敌人</h2><p>'+list.length+' 个敌人。掉落数量和价值按单次击杀计算，价值含直接掉落的金币与物品出售价格。</p>'+summary+
+ $('detail').innerHTML='<h2>敌人</h2><p>'+list.length+' 个敌人。数量与概率按基础掉落规则列出。'+(playerSave?'存档翻倍计入价值期望。':'')+'单次击杀价值含直接掉落的金币与物品出售价格。</p>'+summary+
   '<div class="toc">'+groups.map(([id,title])=>'<button type="button" data-scroll="enemy-'+esc(id)+'">'+esc(title)+'</button>').join('')+'</div>'+
   groups.map(([id,title])=>'<section id="enemy-'+esc(id)+'"><h3>'+esc(title)+'</h3>'+(id==='Dungeons'?'<p class="muted">地下城中的击杀没有掉落，通关奖励见各地下城条目。</p>':'')+sections.get(id).join('')+'</section>').join('');
 }
