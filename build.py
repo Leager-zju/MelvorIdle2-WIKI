@@ -101,9 +101,14 @@ def build(unpacked=ROOT/'unpacked', output_dir=ROOT, report_path=ROOT/'extractio
     icons = load_icons(game, unpacked, output_dir/'assets')
     assert LOGO in icons and FAVICON in icons
     version = game_version(unpacked)
-    payload = {'game': game, 'translations': plain, 'contextual': contextual, 'report': report, 'icons': icons, 'version': version}
+    render_site({'game': game, 'translations': plain, 'contextual': contextual, 'report': report, 'icons': icons, 'version': version}, output_dir)
+    return version
+
+
+def render_site(payload, output_dir):
     encoded = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).replace('<', '\\u003c')
     template = (ROOT/'template.html').read_text('utf-8')
+    icons = payload['icons']
     template = template.replace('__STYLE__', (ROOT/'style.css').read_text('utf-8'))
     template = template.replace('__LOGO__', icons[LOGO]).replace('__FAVICON__', icons[FAVICON])
     brotli = (ROOT/'vendor/brotli/decode.js').read_text('utf-8')
@@ -114,8 +119,9 @@ def build(unpacked=ROOT/'unpacked', output_dir=ROOT, report_path=ROOT/'extractio
     assert template.count('__DATA__') == 1
     output = template.replace('__DATA__', encoded)
     (output_dir/'index.html').write_text(output, encoding='utf-8')
-    print(f'Built {sum(map(len, game["Objects"].values()))} entries; {len(translations)} translations; {len(icons)} icons; {len(output.encode())} bytes', flush=True)
-    return version
+    entries = sum(map(len, payload['game']['Objects'].values()))
+    translations = len(payload['translations']) + len(payload['contextual'])
+    print(f'Built {entries} entries; {translations} translations; {len(icons)} icons; {len(output.encode())} bytes', flush=True)
 
 
 if __name__ == '__main__':

@@ -1,6 +1,8 @@
 # Extracted game files (~500 MB of the game's own data). Rebuild locally with extract.py; never publish.
 unpacked/
 .wiki-update/
+/.wiki-snapshot/
+/_site/
 # Disassembly of the game DLL; local reference only, not for redistribution.
 mechanics-il.txt
 # Build output of the optional IL tool
