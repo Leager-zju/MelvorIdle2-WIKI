@@ -44,6 +44,9 @@ body.no-toc .page-contents{display:none}
 .page-contents button{display:block;width:100%;text-align:left;background:transparent;border:0;border-left:2px solid transparent;border-radius:0;padding:5px 10px;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .page-contents button:hover,.page-contents button[aria-current]{background:#20372f;color:var(--accent);border-left-color:var(--accent)}
 .page-contents button.nested{padding-left:20px}
+.page-contents button[aria-expanded]{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.toc-caret::after{content:'▸'}
+.page-contents button[aria-expanded="true"] .toc-caret::after{content:'▾'}
 main h2{font-size:28px;font-weight:600;border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:12px}
 main h3{border-bottom:1px solid #22303d;padding-bottom:4px}
 .lead{font-size:15px}

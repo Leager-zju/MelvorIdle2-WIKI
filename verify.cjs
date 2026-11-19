@@ -112,15 +112,32 @@ assert.match(run('contentsMarkup([{id:"card-1",title:"经验与产出",nested:fa
 assert.match(run('contentsMarkup([{id:"card-1",title:"<img>",nested:false}])'),/\&lt;img\&gt;/);
 assert.doesNotMatch(run('contentsMarkup([{id:"card-1",title:"<img>",nested:false}])'),/<img>/);
 {
- const main=element('detail'),queried=main.querySelectorAll;
+ const main=element('detail'),nav=element('page-toc'),queried=main.querySelectorAll,navQuery=nav.querySelectorAll;
  const heading=(tagName,id,textContent,inTable=false)=>({tagName,id,textContent,closest:s=>inTable&&s.includes('table')?{}:null,getClientRects:()=>[]});
  const group=heading('H3','enemy-CombatAreas','战斗区域'),area=heading('H4','','哥布林森林'),tableHeading=heading('H4','','表内标题',true);
- main.querySelectorAll=selector=>selector==='h3, h4, details > summary'?[group,area,tableHeading]:selector==='[id]'?[group,{id:'page-section-1'}]:[];
+ const dark=heading('H3','enemy-DarkAreas','黑暗区域'),darkArea=heading('H4','','阴森荒原');
+ main.querySelectorAll=selector=>selector==='h3, h4, details > summary'?[group,area,tableHeading,dark,darkArea]:selector==='[id]'?[group,dark,{id:'page-section-1'}]:[];
+ function button(sectionId,parentId){
+  const attrs=new Map(parentId?[]:[['aria-expanded','false']]);
+  return {dataset:{sectionId,parentId},hidden:!!parentId,attrs,hasAttribute:k=>attrs.has(k),setAttribute:(k,v)=>attrs.set(k,v),removeAttribute:k=>attrs.delete(k)};
+ }
+ const combatButton=button(group.id),forestButton=button('page-section-2',group.id),darkButton=button(dark.id),darkAreaButton=button('page-section-3',dark.id);
+ nav.querySelectorAll=()=>[combatButton,forestButton,darkButton,darkAreaButton];
  context.document.documentElement={scrollHeight:1000};
  run('syncPageContents()');
- assert.match(element('page-toc').innerHTML,/data-section-id="enemy-CombatAreas">战斗区域<\/button>[^]*?data-section-id="page-section-2" class="nested">哥布林森林<\/button>/);
- assert.doesNotMatch(element('page-toc').innerHTML,/表内标题/);
+ assert.match(nav.innerHTML,/data-section-id="enemy-CombatAreas" aria-expanded="false" aria-controls="toc-link-page-section-2">战斗区域[^]*?data-section-id="page-section-2" class="nested" id="toc-link-page-section-2" data-parent-id="enemy-CombatAreas" hidden>哥布林森林<\/button>/);
+ assert.doesNotMatch(nav.innerHTML,/表内标题/);
+ assert.equal(combatButton.attrs.get('aria-expanded'),'true');
+ assert.equal(forestButton.hidden,false);
+ assert.equal(darkAreaButton.hidden,true);
+ run('pinnedSection="page-section-3";updateContentsPosition()');
+ assert.equal(darkButton.attrs.get('aria-expanded'),'true');
+ assert.equal(combatButton.attrs.get('aria-expanded'),'false');
+ assert.equal(forestButton.hidden,true);
+ assert.equal(darkAreaButton.hidden,false);
+ assert.equal(darkAreaButton.attrs.get('aria-current'),'location');
  main.querySelectorAll=queried;
+ nav.querySelectorAll=navQuery;
  run('syncPageContents()');
 }
 // Mastery ranks and their rewards are one merged table.

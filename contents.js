@@ -1,7 +1,18 @@
 let contentsItems=[],pinnedSection=null,activeContentsId=null;
 
 function contentsMarkup(items){
- return items.map(item=>'<button type="button" data-section-id="'+esc(item.id)+'"'+(item.nested?' class="nested"':'')+'>'+esc(item.title)+'</button>').join('');
+ const children=new Map();
+ for(const {id,parentId} of items)if(parentId){
+  if(!children.has(parentId))children.set(parentId,[]);
+  children.get(parentId).push('toc-link-'+id);
+ }
+ return items.map(item=>{
+  const controls=children.get(item.id);
+  const folded=item.parentId?' id="toc-link-'+esc(item.id)+'" data-parent-id="'+esc(item.parentId)+'" hidden':'';
+  return '<button type="button" data-section-id="'+esc(item.id)+'"'+(item.nested?' class="nested"':'')+folded+
+   (controls?' aria-expanded="false" aria-controls="'+esc(controls.join(' '))+'"':'')+'>'+esc(item.title)+
+   (controls?'<span class="toc-caret" aria-hidden="true"></span>':'')+'</button>';
+ }).join('');
 }
 
 function updateContentsPosition(){
@@ -17,8 +28,11 @@ function updateContentsPosition(){
  if(pinnedSection&&contentsItems.some(item=>item.id===pinnedSection))active=pinnedSection;
  if(active===activeContentsId)return;
  activeContentsId=active;
+ const expanded=contentsItems.find(item=>item.id===active)?.parentId||active;
  const nav=$('page-toc');let currentButton;
  for(const button of nav.querySelectorAll('button')){
+  if(button.dataset.parentId)button.hidden=button.dataset.parentId!==expanded;
+  if(button.hasAttribute('aria-expanded'))button.setAttribute('aria-expanded',String(button.dataset.sectionId===expanded));
   if(button.dataset.sectionId===active){button.setAttribute('aria-current','location');currentButton=button;}
   else button.removeAttribute('aria-current');
  }
@@ -36,10 +50,12 @@ function syncPageContents(){
  if(headings.length===contentsItems.length&&headings.every((node,i)=>node===contentsItems[i].node&&node.textContent.trim()===contentsItems[i].title))return updateContentsPosition();
  document.body.classList.toggle('no-toc',headings.length<2);
  pinnedSection=activeContentsId=null;
- const ids=new Set([...main.querySelectorAll('[id]')].map(node=>node.id));let serial=0;
+ const ids=new Set([...main.querySelectorAll('[id]')].map(node=>node.id));let serial=0,parentId=null;
  contentsItems=headings.map(node=>{
   if(!node.id){do{node.id='page-section-'+(++serial);}while(ids.has(node.id));ids.add(node.id);}
-  return {id:node.id,title:node.textContent.trim(),node,nested:node.tagName==='H4'||!!node.closest('.skillgrid')};
+  if(node.tagName==='H3')parentId=node.id;
+  const subheading=node.tagName==='H4';
+  return {id:node.id,title:node.textContent.trim(),node,nested:subheading||!!node.closest('.skillgrid'),parentId:subheading?parentId:null};
  });
  $('page-toc').innerHTML=contentsMarkup(contentsItems)||'<p class="muted">暂无目录</p>';
  updateContentsPosition();
