@@ -26,9 +26,9 @@ STATE = ROOT/'.wiki-steam'
 os.environ.update(GIT_TERMINAL_PROMPT='0', GCM_INTERACTIVE='never')
 
 
-def run(*args, input=None):
+def run(*args, input=None, timeout=240):
     return subprocess.run(args, input=input, capture_output=True, text=True, check=True,
-                          cwd=ROOT, creationflags=subprocess.CREATE_NO_WINDOW, timeout=240)
+                          cwd=ROOT, creationflags=subprocess.CREATE_NO_WINDOW, timeout=timeout)
 
 
 def github_token():
@@ -143,7 +143,7 @@ def main(steam, game, check_only):
         with ZipFile(source_zip) as archive:
             archive.extractall(source)
         result = run(str(Path(sys.executable).with_name('python.exe')), str(source/'steam-bundle.py'),
-                     str(game), str(stage), target, str(STATE/'snapshot.zip'))
+                     str(game), str(stage), target, str(STATE/'snapshot.zip'), timeout=420)
         print(result.stdout.strip(), flush=True)
         if installed_build(manifest) != (target, True) or latest_build() != target:
             raise RuntimeError('Steam Build ID changed during the build')
