@@ -243,12 +243,20 @@ function recipeValue(e){const o=e.obj,gold=id=>itemEntry(id)?.obj.SellsFor?.Quan
  const c=o.CurrencyReward;if(c&&shortId(c.Currency)==='GoldPieces')value+=(o.BaseCurrencyLootChance??1)*((c.MinQuantity??c.Quantity)+(c.MaxQuantity??c.Quantity))/2;
  return value;
 }
-function recipeValueCell(e,v=recipeValue(e),ms=recipeTime(e)){return cell(v,v?fmt(v)+' 金币'+(ms?'<small class="en">约 '+fmt(v*3600000/ms)+' 金币/小时</small>':''):'—');}
-const recipeHeaders=['目标 / 配方','解锁条件','基础 XP','基础周期','基础 XP/h','产物','产物期望价值','材料'];
-const savedRecipeHeaders=['目标 / 配方','解锁条件','XP（存档）','周期（存档）','XP/h（存档）','产物','产物期望价值（存档）','材料'];
-const recipeValueNote='产物期望价值：按基础概率与出售价格估算每次动作的产物售价（扒窃按每次成功计），下方为按基础周期折算的每小时金币；未计翻倍、保留、加成和材料成本。';
+const recipeHeaders=['目标 / 配方','解锁条件','基础 XP','基础周期','基础 XP/h','产物','单次产物期望价值','每小时价值','材料'];
+const savedRecipeHeaders=['目标 / 配方','解锁条件','XP（存档）','周期（存档）','XP/h（存档）','产物','单次产物期望价值（存档）','每小时价值（存档）','材料'];
+const recipeValueNote='单次产物期望价值按基础概率和出售价格估算，扒窃按每次成功计。每小时价值按基础周期折算。未计翻倍、保留、加成和材料成本。';
 // With a loaded save, XP / cycle / value use the player's bonuses (savedRecipeStats); otherwise base values.
-function recipeRows(list,save=null){return list.map(e=>{const s=save?savedRecipeStats(e,save):{xp:e.obj.BaseExperience,ms:recipeTime(e),value:recipeValue(e)},ms=s.ms,xp=s.xp,outputs=sourceRows.filter(r=>r.entry===e&&/主要|产出|完成配方/.test(r.basis));return [cell(e.title,eLink(e)+'<small class="en">'+esc(e.en)+'</small>'),cell(levelOf(e.obj),gateText(e)),cell(xp??'',fmt(xp)),cell(ms??'',ms?fmt(ms/1000)+' 秒':'见详情'),cell(ms&&xp?xp*3600000/ms:'',ms&&xp?fmt(xp*3600000/ms):'—'),cell('',outputs.map(r=>refLink(r.item,'Item')+' × '+quantity(r)).join('<br>')),recipeValueCell(e,s.value,ms),cell('',e.obj.Ingredients?render(e.obj.Ingredients):'—')];});}
+function recipeRows(list,save=null){return list.map(e=>{
+ const {xp,ms,value}=save?savedRecipeStats(e,save):{xp:e.obj.BaseExperience,ms:recipeTime(e),value:recipeValue(e)};
+ const hourly=ms>0?value*3600000/ms:null;
+ const outputs=sourceRows.filter(r=>r.entry===e&&/主要|产出|完成配方/.test(r.basis));
+ return [cell(e.title,eLink(e)+'<small class="en">'+esc(e.en)+'</small>'),cell(levelOf(e.obj),gateText(e)),
+  cell(xp??'',fmt(xp)),cell(ms??'',ms?fmt(ms/1000)+' 秒':'见详情'),cell(ms&&xp?xp*3600000/ms:'',ms&&xp?fmt(xp*3600000/ms):'—'),
+  cell('',outputs.map(r=>refLink(r.item,'Item')+' × '+quantity(r)).join('<br>')),
+  cell(value,value?fmt(value)+' 金币':'—'),cell(hourly??'',hourly?fmt(hourly)+' 金币/小时':'—'),
+  cell('',e.obj.Ingredients?render(e.obj.Ingredients):'—')];
+});}
 function rankRewards(bonuses,rankId){
  return bonuses.filter(b=>(b.obj.Requirements||[]).some(r=>r.Data?.Rank===rankId)).map(b=>{
   const effects=(boostByOwner.get(b.key)||[]).map(r=>esc(effectText(r.m))+(r.m.Condition?'（'+render(r.m.Condition)+'）':''));
@@ -307,7 +315,7 @@ function savedBoostSummary(skill,recipes){
  for(const e of recipes)for(const r of savedRecipeStats(e,playerSave).applied)used.set(r.key+'#'+r.path,r);
  const level=saveLevel(skill,playerSave),rows=[...used.values()];
  const list=rows.length?'<ul class="save-boosts">'+rows.map(r=>{const e=byKey.get(r.key);return '<li>'+esc(effectText(r.m))+(r.times>1?' × '+r.times:'')+' · '+eLink(e)+' <small>'+esc(r.label)+'</small></li>';}).join('')+'</ul>':'<p class="muted">存档中没有影响本表的长期加成。</p>';
- return '<div class="note save-note"><p><b>已按存档“'+esc(playerSave.character)+'”计算</b>（'+esc(skillName(skill))+' 等级 '+level+'）。计入工具腰带、商店升级、占星节点、宠物与精通公会阶级奖励中无附加条件的经验、间隔、翻倍与产物数量加成；药水、装备套装、事件、战斗效果、保留与材料成本不计。产物期望价值按出售价格估算每次动作（扒窃按每次成功）。</p><p><b>本表使用的加成（'+rows.length+'）</b></p>'+list+'</div>';
+ return '<div class="note save-note"><p><b>已按存档“'+esc(playerSave.character)+'”计算</b>（'+esc(skillName(skill))+' 等级 '+level+'）。计入工具腰带、商店升级、占星节点、宠物与精通公会阶级奖励中无附加条件的经验、间隔、翻倍与产物数量加成；药水、装备套装、事件、战斗效果、保留与材料成本不计。单次产物期望价值按出售价格估算，扒窃按每次成功计。每小时价值按存档周期折算。</p><p><b>本表使用的加成（'+rows.length+'）</b></p>'+list+'</div>';
 }
 const saveProgressOptions={
  MasteryGuildTask:{label:'隐藏已完成的任务',note:'仅隐藏可从存档确认完成的任务。',empty:'当前筛选下没有剩余精通任务。',done:save=>{

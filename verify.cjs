@@ -272,12 +272,13 @@ assert.match(orReq,/<li>[^]*?等级 8 <b class="or">或<\/b> [^]*?等级 6<\/li>
 assert.doesNotMatch(orReq,/或：/);
 assert.equal(run('xpForLevel(2)'),83);
 assert.equal(run('xpForLevel(99)'),13034427);
-// Every recipe table carries the expected product value column, and values are finite and non-negative.
+// Recipe tables expose separate sortable columns for per-action and hourly values.
+const recipeValueColumns=/<button data-sort="6">单次产物期望价值 ↕<\/button>[^]*?<button data-sort="7">每小时价值 ↕<\/button>/;
 for(const type of JSON.parse(run('JSON.stringify(types.filter(t=>/Recipe$/.test(t)&&playerTypes.has(t)))'))){
- run('browse('+JSON.stringify(type)+')');assert.match(element('detail').innerHTML,/产物期望价值/,type);
+ run('browse('+JSON.stringify(type)+')');assert.match(element('detail').innerHTML,recipeValueColumns,type);
  assert.equal(run('entries.filter(e=>e.type==='+JSON.stringify(type)+').every(e=>{const v=recipeValue(e);return Number.isFinite(v)&&v>=0;})'),true,type);
 }
-run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/产物期望价值/);
+run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,recipeValueColumns);
 // ---- Save import: build a small version-31 save the way the game writes it, then read it back. ----
 {
  const zlib=require('node:zlib');
@@ -355,6 +356,9 @@ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/产物
  assert.equal(run('savedRecipeTime(byKey.get("FishingRecipe/ShallowPools"),{percent:{min:-0.02,max:-0.02},flat:{max:-6000}})'),3920);
  run('showSkill("Woodcutting")');
  assert.match(element('detail').innerHTML,/已按存档“Tester”计算/);assert.match(element('detail').innerHTML,/XP（存档）/);
+ assert.match(element('detail').innerHTML,/<button data-sort="6">单次产物期望价值（存档） ↕<\/button>[^]*?<button data-sort="7">每小时价值（存档） ↕<\/button>/);
+ const savedValueCells=JSON.parse(run('JSON.stringify(recipeRows([byKey.get("WoodcuttingRecipe/NormalTree")],playerSave)[0].slice(6,8))'));
+ assert.deepEqual(savedValueCells.map(c=>c.value),[stats.value,stats.value*3600000/stats.ms]);
  assertPlayerPage();
  const hasRow=(markup,key)=>new RegExp('<tr><td[^>]*>(?:<img[^>]*>)?<a href="#'+encodeURIComponent(key)+'"').test(markup);
  const setHide=checked=>{detailChange({target:{id:'save-progress-hide',checked}});return element('save-progress-results').innerHTML;};
@@ -392,7 +396,8 @@ if (referenceSnapshot) {
  near('recipeValue(byKey.get("FishingRecipe/ShallowPools"))',0.8*5+0.2*5+0.01*1);// fish, junk on a miss, bait box
  near('recipeValue(byKey.get("ThievingRecipe/Citizen"))',0.85*7.5+0.105*2+0.045*5+0.0001*1+0.0099*178);
  near('recipeValue(byKey.get("ArtisanRecipe/StoneSword"))',11);
- run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/3\.21 金币/);
+ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/3\.21 金币<\/td><td data-value="3852">3,852 金币\/小时<\/td>/);
+ assert.equal(run('recipeRows([byKey.get("ThievingRecipe/Citizen")])[0][7].html'),'—');
  const golbin=JSON.parse(run(`JSON.stringify(compileCombatEnemy(byKey.get('Enemy/Golbin'),${combatPlayer}))`));
  assert.deepEqual(golbin.limits,[]);
  assert.equal(golbin.profiles[0].hp,20);
