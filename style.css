@@ -131,6 +131,21 @@ h4.skill-group-title{margin:16px 0 4px;color:#c7e9db}
 .skill-group .tabletools{margin-top:4px}
 .querytable.constellation-nodes{min-width:0}
 .constellation-nodes td :is(ul,p){margin:0}
+.querytable.enemy-area-table{min-width:0}
+.enemy-area-table>thead th{white-space:normal}
+.enemy-area-table>tbody>tr>td{min-width:0}
+.enemy-area-table td ul{margin:0;padding-left:0;list-style:none}
+.enemy-area-table td li{margin:0 0 3px}
+.enemy-area-table td li .icon{margin-right:4px}
+.drop-quantity{white-space:nowrap}
+@media(max-width:820px){
+ .enemy-area-table{table-layout:fixed}
+ .enemy-area-table th:nth-child(1){width:20%}
+ .enemy-area-table th:nth-child(2){width:36%}
+ .enemy-area-table th:nth-child(3){width:21%}
+ .enemy-area-table th:nth-child(4){width:23%}
+ .enemy-area-table>tbody>tr>td,.enemy-area-table>thead button{padding:7px}
+}
 .or{color:var(--muted);font-weight:600;margin:0 2px}
 
 .link-preview{position:fixed;z-index:40;width:min(320px,calc(100vw - 24px));padding:12px 14px;overflow:auto;overflow-wrap:anywhere;background:var(--panel);border:1px solid var(--line);border-radius:7px;box-shadow:0 6px 22px #0009;font-size:13px}

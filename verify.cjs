@@ -259,7 +259,7 @@ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/产物
  i32(31);w.push(Buffer.alloc(16));str('Tester');str('Standard');i64(0);for(let k=0;k<4;k++)str('');i32(321);i64(0);i64(0);u8(0);
  const entity=(id,components)=>{str(ns+id);region(()=>{i32(components.length);for(const [cid,fill] of components){str(cid);region(fill);}});};
  const task=(id,goal,complete,trigger)=>{str(ns+id);region(()=>{u8(goal!==null?1:0);if(goal!==null){str(goal);region(()=>{f64(complete?200:0);u8(+complete);});}u8(+trigger);});};
- i32(5);
+ i32(6);
  entity('Woodcutting',[
   ['Experience',()=>f64(13034431)],// level 99
   ['Toolbelt',()=>{i32(1);str(ns+'WoodcuttingTool');region(()=>{i32(1);u8(1);str(ns+'ReinforcedWoodcuttersAxe');});}],
@@ -269,7 +269,11 @@ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/产物
  ]);
  entity('Ranching',[['MasteryGuild',()=>{u8(0);i32(2);task('RanchingTask201',null,false,true);task('RanchingTask202',null,false,false);}]]);
  entity('Shop',[['Shop',()=>{u8(1);u8(0);u8(1);i32(0);i32(0);i32(4);for(const [id,n] of [['WoodenAxeHandle',1],['OakAxeHandle',1],['Cheese',5],['BananaTreeSeed',50]]){i32(n);str(ns+id);}}]]);
- entity('Astrology',[['Action',()=>{u8(0);u8(1);i32(0);i32(166);i32(0);u8(0);u8(1);i32(1);str(ns+'Deedree');region(()=>{f64(10);i32(1);str(ns+'DeedreeA1');i32(0);});}]]);
+ entity('Astrology',[['Action',()=>{u8(0);u8(1);i32(0);i32(166);i32(0);u8(0);u8(1);i32(2);str(ns+'Deedree');region(()=>{f64(10);i32(1);str(ns+'DeedreeA1');i32(0);});str(ns+'Hyden');region(()=>{f64(0);i32(0);i32(1);str(ns+'HydenMajor3');});}]]);
+ entity('Combat',[
+  ['Toolbelt',()=>{i32(1);str(ns+'CombatUtility');region(()=>{i32(1);u8(1);str(ns+'ScarabCharm');});}],
+  ['Equipment',()=>{i32(3);for(const [slot,item,occupied] of [['Amulet','GoldTopazAmulet',0],['RingSlot1','GoldTopazRing',0],['Cape','StripedCape',1]]){str(ns+slot);region(()=>{i32(1);u8(occupied);u8(1);str(ns+item);});}i32(0);}]
+ ]);
  entity('NotAnEntity',[['Anything',()=>{f64(1);}]]);
  const raw=Buffer.concat(w),packed=zlib.brotliCompressSync(raw),exported=packed.toString('base64');
  context.SAVE_STRING=exported;
@@ -281,6 +285,7 @@ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/产物
  assert.equal(element('save-dir').textContent,'%APPDATA%\\Games By Malcs\\Melvor Idle 2\\steam');// matches the Steam save folder
  assert.equal(save.version,31);assert.equal(save.character,'Tester');assert.equal(save.totalLevel,321);
  assert.equal(save.toolbelt.Woodcutting[ns+'WoodcuttingTool'].item,ns+'ReinforcedWoodcuttersAxe');
+ assert.deepEqual(save.equipment,[ns+'GoldTopazAmulet',ns+'GoldTopazRing']);
  assert.deepEqual(save.pets.Woodcutting,[]);// locked pet
  assert.deepEqual(save.tasks.Woodcutting,[ns+'WoodcuttingTask1']);
  assert.deepEqual(save.tasks.Ranching,[ns+'RanchingTask201']);
@@ -293,6 +298,17 @@ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/产物
  const base=JSON.parse(run('JSON.stringify(savedRecipeStats(byKey.get("WoodcuttingRecipe/NormalTree"),null))'));
  assert.equal(base.xp,run('byKey.get("WoodcuttingRecipe/NormalTree").obj.BaseExperience'));
  run('playerSave=parseSave(decodeSaveString(SAVE_STRING));playerBoostsMemo=null');
+ if(referenceSnapshot){
+  const loot=JSON.parse(run('JSON.stringify(savedCombatLoot(playerSave))'));
+  assert.deepEqual(loot,{ItemDoublingChance:.03,BuriableDoublingChance:.08,CurrencyDoublingChance:.1});
+  const expected=25*1.1+2*1.03*1.08+119/23*1.03;
+  assert.ok(Math.abs(run('combatDropValue(combatDropExpectations(byKey.get("Enemy/Golbin").obj,savedCombatLoot(playerSave)))')-expected)<1e-12);
+  assert.equal(run('savedCombatLoot({...playerSave,equipment:[],toolbelt:{Combat:{CombatUtility:{item:"MelvorBase:SlayerChallengeContract",qty:1}}}}).ItemDoublingChance'),0);
+  run('routePage("@table/Enemy")');
+  assert.match(element('detail').innerHTML,/单次击杀价值期望（存档）/);
+  assert.ok(element('detail').innerHTML.includes('>'+run('fmt('+expected+')')+' 金币</td>'));
+  assertPlayerPage();
+ }
  const owned=JSON.parse(run('JSON.stringify([...playerSources(playerSave).keys()])'));
  for(const key of ['Item/ReinforcedWoodcuttersAxe','ShopPurchase/WoodenAxeHandle','ShopPurchase/OakAxeHandle','AstrologyNode/DeedreeA1'])assert.ok(owned.includes(key),key);
  assert.ok(!owned.includes('Pet/Woody'),'locked pets give no bonus');
@@ -353,6 +369,7 @@ if (referenceSnapshot) {
  assert.equal(golbin.profiles[0].attacks[0].hits[0].damage[0][2],8);
  assert.equal(run('Object.fromEntries(combatDropExpectations(byKey.get("Enemy/Golbin").obj))["Item/StoneSword"]'),1/23);
  assert.equal(run('Object.fromEntries(combatDropExpectations(byKey.get("Enemy/Golbin").obj))["Currency/GoldPieces"]'),25);
+ assert.ok(Math.abs(run('combatDropValue(combatDropExpectations(byKey.get("Enemy/Golbin").obj))')-(27+119/23))<1e-12);
  assert.ok(run(`compileCombatEnemy(byKey.get('Enemy/MangroveMantis'),${combatPlayer}).profiles[0].attacks.some(a=>a.hits.length>1)`));
  assert.ok(run(`compileCombatEnemy(byKey.get('Enemy/Harpy'),${combatPlayer}).limits.some(limit=>limit.startsWith('攻击效果 '))`));
  const mining=shopPage.match(/<h3[^>]*><img[^>]*>采矿<\/h3>([^]*?)<\/section>/)?.[1];
@@ -414,7 +431,17 @@ if (referenceSnapshot) {
  // Tables spanning several skills are split into one titled section per skill.
  assert.equal((masteryAll.match(/class="skill-group-title"/g)||[]).length,25);
  run('browse("Item")');assert.match(element('detail').innerHTML,/其他物品（非技能产出）/);
- run('browse("Enemy")');assert.doesNotMatch(element('detail').innerHTML,/skill-group-title/);
+ run('browse("Enemy")');
+ const enemyPage=element('detail').innerHTML;
+ assert.deepEqual([...enemyPage.matchAll(/<section id="enemy-[^"]+"><h3>([^<]+)<\/h3>/g)].map(m=>m[1]),['战斗区域','屠杀者区域','黑暗区域','地下城']);
+ const enemyGroup=id=>enemyPage.match(new RegExp('<section id="enemy-'+id+'">[^]*?<\\/section>'))?.[0]||'';
+ assert.match(enemyGroup('CombatAreas'),/CombatArea%2FGolbinForest[^]*?Enemy%2FGolbin[^]*?Item%2FStoneSword[^]*?32\.17 金币/);
+ assert.match(enemyGroup('SlayerZones'),/CombatArea%2FSlimeForest[^]*?Enemy%2FGreenSlime/);
+ assert.match(enemyGroup('DarkAreas'),/CombatArea%2FDrearyBarrens[^]*?Enemy%2FVampire/);
+ assert.match(enemyGroup('Dungeons'),/Dungeon%2FHobgolbinCamp[^]*?Enemy%2FGolbin[^]*?<td data-value="">—<\/td><td data-value="0">0 金币<\/td>/);
+ assert.equal(new Set([...enemyPage.matchAll(/<tr><td[^>]*>(?:<img[^>]*>)?<a href="#Enemy%2F([^"]+)"/g)].map(m=>m[1])).size,192);
+ assert.doesNotMatch(enemyPage,/每小时|魔法树篝火/);
+ assertPlayerPage();
  assert.equal(run('skillOfEntry(byKey.get("MasteryGuildTask/WoodcuttingTask3"))'),'Woodcutting');
  assert.deepEqual(JSON.parse(run('JSON.stringify(G.Objects.MasteryGuildCategory.map(c=>[c.Id,c.BasePoints]))')),[['Novice',1],['Easy',2],['Adept',3],['Intermediate',5],['Hard',8],['Expert',12]]);
  for(const code of ['showSkill("Woodcutting")','browse("MasteryGuildTask")']){

@@ -49,7 +49,7 @@ function parseSave(bytes){
  if(version<SAVE_MIN_VERSION)throw new Error('存档版本 '+version+' 过旧，请在当前版本游戏中重新导出。');
  r.skip(16);const character=r.str();r.str();r.i64();for(let i=0;i<4;i++)r.str();
  const totalLevel=r.i32();r.i64();r.i64();r.bool();
- const save={version,character,totalLevel,xp:{},toolbelt:{},pets:{},tasks:{},shop:{},astrology:{}};
+ const save={version,character,totalLevel,xp:{},toolbelt:{},equipment:[],pets:{},tasks:{},shop:{},astrology:{}};
  const entities=r.count();
  for(let i=0;i<entities;i++){
   const entity=shortId(r.str());
@@ -63,6 +63,9 @@ function readSaveComponent(r,save,entity,component,end){
  else if(component==='Toolbelt'&&end-r.pos>=4){
   const slots={};for(let n=r.count();n>0;n--){const slot=r.str();r.region(()=>{const qty=r.i32();if(r.bool())slots[slot]={item:r.str(),qty};});}
   save.toolbelt[entity]=slots;
+ }else if(entity==='Combat'&&component==='Equipment'){
+  // The active slots come before saved loadouts. Occupied secondary slots add no bonuses.
+  for(let n=r.count();n>0;n--){r.str();r.region(()=>{r.i32();const occupied=r.bool();if(r.bool()){const item=r.str();if(!occupied)save.equipment.push(item);}});}
  }else if(component==='Pets'){
   const pets=[];for(let n=r.count();n>0;n--){const pet=r.str();r.region(()=>{if(r.bool())pets.push(pet);});}
   save.pets[entity]=pets;
@@ -119,13 +122,13 @@ function playerSources(save){
  return owned;
 }
 // Which bonus records count: owned source, item bonuses only from the toolbelt capability, no conditions / triggers.
+function unconditionalSaveBoost(r){return !r.m.Condition&&!r.m.FromContext&&!r.gates.some(g=>g.ItemCount||g.Duration||g.Turns||g.Charges||g.Trigger);}
 function playerBoosts(save){
  const owned=playerSources(save),records=[];
  for(const r of boostRecords){
-  const o=owned.get(r.key);if(!o||r.m.Condition||r.m.FromContext)continue;
+  const o=owned.get(r.key);if(!o||!unconditionalSaveBoost(r))continue;
   if(r.key.startsWith('Item/')&&!r.path.includes(':Toolbelt'))continue;
   if(r.key.startsWith('AstrologyConstellation/')&&!/PerMinorNodeBonuses/.test(r.path))continue;
-  if(r.gates.some(g=>g.ItemCount||g.Duration||g.Turns||g.Charges||g.Trigger))continue;
   records.push({...r,times:r.key.startsWith('ShopPurchase/')||r.key.startsWith('AstrologyConstellation/')?o.times:1,label:o.label});
  }
  return records;
@@ -171,6 +174,23 @@ function boostTotals(save,skill,e){
 }
 let playerBoostsMemo=null;
 function playerBoostsCache(save){if(playerBoostsMemo?.save!==save)playerBoostsMemo={save,records:playerBoosts(save)};return playerBoostsMemo.records;}
+
+function savedCombatLoot(save){
+ const chances={ItemDoublingChance:0,BuriableDoublingChance:0,CurrencyDoublingChance:0};
+ if(!save)return chances;
+ const equipped=(save.equipment||[]).flatMap(id=>(boostByOwner.get('Item/'+shortId(id))||[])
+  .filter(r=>r.path.startsWith('Capabilities.MelvorBase:Equipment.Bonuses.')&&unconditionalSaveBoost(r)).map(r=>({...r,times:1})));
+ for(const {m,times} of [...playerBoostsCache(save),...equipped]){
+  const ctx=m.LocalContext,stat=m.Stat?.Name;
+  if(m.Stat?.StatsType!==G.Namespace+':CombatLoot'||!(stat in chances)||ctx?.Component?.Entity!==G.Namespace+':Combat'||ctx.Component.Component!=='Loot')continue;
+  if(Object.keys(ctx).some(k=>k!=='Component'&&ctx[k]!=null))continue;
+  const experience=m.Scaling?.Data?.Experience;
+  if(m.Scaling&&!experience)continue;
+  chances[stat]+=m.Value*times*(experience?saveLevel(shortId(experience.Entity),save):1);
+ }
+ for(const k of Object.keys(chances))chances[k]=Math.min(1,Math.max(0,chances[k]));
+ return chances;
+}
 
 // Interval formulas from each skill's *ActionStats (IL): artisan / herblore / cooking add the flat bonus
 // after the percent, the others before it. Never below 1 ms.

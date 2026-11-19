@@ -384,10 +384,10 @@ function shopSections(list,renderPart){
 }
 function browse(type){
  if(type==='MasteryGuildRank'||type==='MasteryGuildBonus')return masteryTablePage();
+ if(type==='Enemy')return enemyAreaPage();
  const list=entries.filter(e=>e.type===type);current='';updateList();
  let headers=['名称','分类','等级 / 条件','出售价格'],toRows=part=>part.map(e=>[cell(e.title,eLink(e)+'<small class="en">'+esc(e.en)+'</small>'),cell(shortId(e.obj.Category)||typeNames[type]||type,render(e.obj.Category||e.obj.Capabilities?.['MelvorBase:Equipment']?.Type||typeNames[type]||type)),cell(levelOf(e.obj),gateText(e)),cell(e.obj.SellsFor?.Quantity??'',e.obj.SellsFor?render(e.obj.SellsFor):'—')]);
  if(/Recipe$/.test(type)){headers=recipeHeaders;toRows=recipeRows;}
- if(type==='Enemy'){headers=['敌人','等级属性','元素','掉落表'];toRows=part=>part.map(e=>[cell(e.title,eLink(e)),cell('',render(e.obj.Levels)),cell(shortId(e.obj.Element),render(e.obj.Element)),cell('',pageLink(e.key,'查看掉落与区域'))]);}
  if(type==='ShopPurchase'){headers=['商店项目','费用','解锁条件','提供'];toRows=part=>part.map(e=>[cell(e.title,eLink(e)),cell('',render(e.obj.Costs)),cell(levelOf(e.obj),gateText(e)),cell('',render(e.obj.Provides))]);}
  if(type==='Pet'||type==='MasteryGuildTask'){headers=type==='MasteryGuildTask'?masteryTaskHeaders:skillDetailHeaders;toRows=skillDetailRows;}
  // Skill-related lists are split into one section per skill; others stay a single table.

@@ -110,11 +110,14 @@ function createCombatKernel(){
 
 const combatKernel=createCombatKernel();
 
-function combatDropExpectations(enemy){
+function combatDropExpectations(enemy,bonus={}){
  const totals=new Map(),bundle=enemy.Drops||{};
  function add(type,id,row,chance){
   const min=row.MinQuantity??row.Quantity,max=row.MaxQuantity??row.Quantity??min;
-  const quantity=(min+max)/2*chance;
+  const item=type==='Item'?itemEntry(id):null;
+  const multiplier=type==='Currency'?1+(bonus.CurrencyDoublingChance||0):
+   (1+(bonus.ItemDoublingChance||0))*(1+(item?.obj.Capabilities?.[G.Namespace+':Bury']?(bonus.BuriableDoublingChance||0):0));
+  const quantity=(min+max)/2*chance*multiplier;
   if(!id||!Number.isFinite(quantity)||quantity<=0)return;
   const key=type+'/'+shortId(id);
   totals.set(key,(totals.get(key)||0)+quantity);
@@ -126,6 +129,49 @@ function combatDropExpectations(enemy){
   if(weight>0)for(const row of table.Table)add('Item',row.Item,row,table.Chance*row.Weight/weight);
  }
  return [...totals];
+}
+
+function combatDropValue(drops){
+ return drops.reduce((sum,[key,qty])=>{
+  if(key==='Currency/GoldPieces')return sum+qty;
+  const price=byKey.get(key)?.obj.SellsFor;
+  return sum+(price?.Currency===G.Namespace+':GoldPieces'?qty*price.Quantity:0);
+ },0);
+}
+
+function enemyAreaPage(){
+ current='';updateList();
+ const groups=[['CombatAreas','战斗区域'],['SlayerZones','屠杀者区域'],['DarkAreas','黑暗区域'],['Dungeons','地下城']];
+ const sections=new Map(groups.map(([id])=>[id,[]])),seen=new Set(),loot=savedCombatLoot(playerSave);
+ const list=entries.filter(e=>e.type==='Enemy');
+ function table(enemies,dungeon=false){
+  const rows=enemies.map(e=>{
+   const drops=dungeon?[]:combatDropExpectations(e.obj,loot),value=combatDropValue(drops);
+   const items=drops.length?'<ul>'+drops.map(([key,qty])=>{
+    const item=byKey.get(key);
+    return '<li>'+(item?icon(item,18)+link(item):'—')+' <span class="drop-quantity">× '+(qty<.005?'&lt;0.01':fmt(qty))+'</span></li>';
+   }).join('')+'</ul>':'—';
+   const levels=(e.obj.Levels||[]).map(r=>skillLink(shortId(r.Key))+' '+fmt(r.Value));
+   return [cell(e.title,eLink(e)+'<small class="en">'+esc(e.en)+'</small>'),cell('',items),cell(value,fmt(value)+' 金币'),cell('',(levels.length?levels.join('、')+'<br>':'')+render(e.obj.Element))];
+  });
+  return dataTable(['敌人','掉落物与期望数量','单次击杀价值期望'+(playerSave?'（存档）':''),'等级属性与元素'],rows,undefined,'enemy-area-table');
+ }
+ for(const area of configEntries('Combat','Areas')){
+  if(area.type!=='CombatArea'&&area.type!=='Dungeon')continue;
+  const dungeon=area.type==='Dungeon';
+  const ids=(area.obj.Enemies||[]).flatMap(e=>dungeon?(e.Enemies||[]).map(r=>r.Enemy):[e]);
+  const enemies=[...new Set(ids)].map(id=>byKey.get('Enemy/'+shortId(id))).filter(Boolean);
+  if(!enemies.length)continue;
+  const group=dungeon?'Dungeons':shortId(area.obj.Category);
+  for(const enemy of enemies)seen.add(enemy.key);
+  (sections.get(group)||sections.get('CombatAreas')).push('<h4>'+link(area)+'</h4>'+table(enemies,dungeon));
+ }
+ const other=list.filter(e=>!seen.has(e.key));
+ if(other.length)sections.get('CombatAreas').push('<h4>未标注区域</h4>'+table(other));
+ const summary=playerSave?'<p class="muted">存档已计入可确认的翻倍几率：物品 '+pct(loot.ItemDoublingChance)+'、可埋葬物额外 '+pct(loot.BuriableDoublingChance)+'、金币 '+pct(loot.CurrencyDoublingChance)+'。临时效果和屠杀任务等有条件的加成未计入。'+(!playerSave.equipment?'重新导入旧存档后可计入当前战斗装备。':'')+'</p>':'';
+ $('detail').innerHTML='<h2>敌人</h2><p>'+list.length+' 个敌人。掉落数量和价值按单次击杀计算，价值含直接掉落的金币与物品出售价格。</p>'+summary+
+  '<div class="toc">'+groups.map(([id,title])=>'<button type="button" data-scroll="enemy-'+esc(id)+'">'+esc(title)+'</button>').join('')+'</div>'+
+  groups.map(([id,title])=>'<section id="enemy-'+esc(id)+'"><h3>'+esc(title)+'</h3>'+(id==='Dungeons'?'<p class="muted">地下城中的击杀没有掉落，通关奖励见各地下城条目。</p>':'')+sections.get(id).join('')+'</section>').join('');
 }
 
 function compileCombatEnemy(entry,player){
