@@ -309,10 +309,32 @@ function savedBoostSummary(skill,recipes){
  const list=rows.length?'<ul class="save-boosts">'+rows.map(r=>{const e=byKey.get(r.key);return '<li>'+esc(effectText(r.m))+(r.times>1?' × '+r.times:'')+' · '+eLink(e)+' <small>'+esc(r.label)+'</small></li>';}).join('')+'</ul>':'<p class="muted">存档中没有影响本表的长期加成。</p>';
  return '<div class="note save-note"><p><b>已按存档“'+esc(playerSave.character)+'”计算</b>（'+esc(skillName(skill))+' 等级 '+level+'）。计入工具腰带、商店升级、占星节点、宠物与精通公会阶级奖励中无附加条件的经验、间隔、翻倍与产物数量加成；药水、装备套装、事件、战斗效果、保留与材料成本不计。产物期望价值按出售价格估算每次动作（扒窃按每次成功）。</p><p><b>本表使用的加成（'+rows.length+'）</b></p>'+list+'</div>';
 }
+const saveProgressOptions={
+ MasteryGuildTask:{label:'隐藏已完成的任务',note:'仅隐藏可从存档确认完成的任务。',empty:'当前筛选下没有剩余精通任务。',done:save=>{
+  const tasks=new Set(Object.values(save.tasks||{}).flat());return e=>tasks.has(G.Namespace+':'+e.obj.Id);
+ }},
+ ShopPurchase:{label:'隐藏已购买的一次性条目',empty:'当前筛选下没有剩余商店条目。',done:save=>e=>e.obj.DefaultBuyLimit===1&&save.shop?.[G.Namespace+':'+e.obj.Id]>0}
+};
+let updateSaveProgress;
+function saveProgressList(type,list,renderList){
+ const option=saveProgressOptions[type];
+ if(!playerSave||!option)return renderList(list);
+ const isDone=option.done(playerSave);
+ const render=()=>{const visible=option.hide?list.filter(e=>!isDone(e)):list;return visible.length?renderList(visible):'<p class="muted">'+esc(option.empty)+'</p>';};
+ updateSaveProgress=checked=>{option.hide=checked;$('save-progress-results').innerHTML=render();};
+ return '<div class="tabletools"><label class="check"><input id="save-progress-hide" type="checkbox"'+(option.hide?' checked':'')+'> '+esc(option.label)+'</label>'+(option.note?'<small>'+esc(option.note)+'</small>':'')+'</div><div id="save-progress-results">'+render()+'</div>';
+}
 function showSkill(id){
  const s=skillById.get(id);if(!s){wikiHome();return;}current='';updateList();
- const recipes=configEntries(id,'Recipes');const tabs=['Recipes','Animals','Courses','Constellations','MasteryGuildRanks','MasteryGuildBonuses','MasteryGuildTasks','Pets'];
- $('detail').innerHTML='<div class="breadcrumb">'+pageLink('@skills','技能总览')+'</div><h2>'+icon(s.entry,42)+esc(s.title)+'</h2><p>'+esc(s.entry.en)+' · '+boostLink(id)+' · '+pageLink('@guides','训练与解锁指南')+'</p><div class="note"><b>查看本技能的全部加成来源：</b> '+boostLink(id)+'。经验、间隔、翻倍、保留、收益和特殊效果均可按来源筛选。</div><h3>技能解锁条件</h3>'+gateText(s.entry)+(recipes.length?recipeSection(id,recipes):'')+tabs.filter(f=>f!=='Recipes').map(field=>{if(field==='MasteryGuildRanks')return masterySection(id);if(field==='MasteryGuildBonuses')return '';const list=configEntries(id,field);return list.length?'<section><h3>'+esc(({Animals:'动物',Courses:'敏捷路线',Constellations:'星座',MasteryGuildRanks:'精通阶级',MasteryGuildBonuses:'精通奖励',MasteryGuildTasks:'精通任务',Pets:'宠物'})[field])+' · '+list.length+'</h3>'+dataTable(field==='MasteryGuildTasks'?masteryTaskHeaders:skillDetailHeaders,skillDetailRows(list))+'</section>':'';}).join('');
+ const recipes=configEntries(id,'Recipes');const tabs=['Animals','Courses','Constellations','MasteryGuildRanks','MasteryGuildTasks','Pets'];
+ const sections=tabs.map(field=>{
+  if(field==='MasteryGuildRanks')return masterySection(id);
+  const list=configEntries(id,field);if(!list.length)return '';
+  const title={Animals:'动物',Courses:'敏捷路线',Constellations:'星座',MasteryGuildTasks:'精通任务',Pets:'宠物'}[field];
+  const body=field==='MasteryGuildTasks'?saveProgressList('MasteryGuildTask',list,part=>dataTable(masteryTaskHeaders,skillDetailRows(part))):dataTable(skillDetailHeaders,skillDetailRows(list));
+  return '<section><h3>'+esc(title)+' · '+list.length+'</h3>'+body+'</section>';
+ }).join('');
+ $('detail').innerHTML='<div class="breadcrumb">'+pageLink('@skills','技能总览')+'</div><h2>'+icon(s.entry,42)+esc(s.title)+'</h2><p>'+esc(s.entry.en)+' · '+boostLink(id)+' · '+pageLink('@guides','训练与解锁指南')+'</p><div class="note"><b>查看本技能的全部加成来源：</b> '+boostLink(id)+'。经验、间隔、翻倍、保留、收益和特殊效果均可按来源筛选。</div><h3>技能解锁条件</h3>'+gateText(s.entry)+(recipes.length?recipeSection(id,recipes):'')+sections;
  $('detail').scrollTop=0;
 }
 function relatedTable(e,kind){const id=G.Namespace+':'+e.obj.Id,opts={tag:'h4'};
@@ -356,7 +378,7 @@ function browse(type){
  // Skill-related lists are split into one section per skill; others stay a single table.
  const skillOf=type==='Item'?skillOfItem:/Recipe$/.test(type)||type==='Pet'||type==='MasteryGuildTask'?skillOfEntry:null;
  const table=part=>dataTable(headers,toRows(part));
- const body=type==='ShopPurchase'?shopSections(list,table):skillOf?skillSections(list,skillOf,table,{other:type==='Item'?'其他物品（非技能产出）':'其他'}):dataTable(headers,toRows(list),'browse');
+ const body=saveProgressList(type,list,part=>type==='ShopPurchase'?shopSections(part,table):skillOf?skillSections(part,skillOf,table,{other:type==='Item'?'其他物品（非技能产出）':'其他'}):dataTable(headers,toRows(part),'browse'));
  const grouping=type==='ShopPurchase'?' · 按商店类别与子类别分区':skillOf?' · 按技能分区':'';
  $('detail').innerHTML='<h2>'+esc(typeNames[type]||type)+'</h2><p>'+list.length+' 个条目'+grouping+' · 所有列可排序，支持表内筛选与导出。</p>'+(/Recipe$/.test(type)?'<p class="muted">'+recipeValueNote+'</p>':'')+body;$('detail').scrollTop=0;
 }
@@ -416,7 +438,10 @@ $('search').addEventListener('keydown',event=>{
 $('detail').addEventListener('input',event=>{
  const input=event.target;if(input.dataset.filter){const query=input.value.toLowerCase();for(const row of $(input.dataset.filter).tBodies[0].rows)row.hidden=!row.textContent.toLowerCase().includes(query);}
 });
-$('detail').addEventListener('change',event=>{if(event.target.id==='production-recipe')$('production-interval').value=recipeTime(byKey.get(event.target.value));});
+$('detail').addEventListener('change',event=>{
+ if(event.target.id==='save-progress-hide')updateSaveProgress(event.target.checked);
+ if(event.target.id==='production-recipe')$('production-interval').value=recipeTime(byKey.get(event.target.value));
+});
 $('detail').addEventListener('click',event=>{
  const target=event.target.closest('button,a');if(!target)return;
  if(target.dataset.scroll){event.preventDefault();$(target.dataset.scroll)?.scrollIntoView({behavior:'smooth',block:'start'});return;}

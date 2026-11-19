@@ -70,9 +70,12 @@ function readSaveComponent(r,save,entity,component,end){
   if(r.bool())r.str();
   const done=[];
   for(let n=r.count();n>0;n--){const task=r.str();r.region(()=>{
-   // Same rule as ActiveMasteryGuildTask.CheckIfMet for tasks without condition / trigger goals.
-   let complete=false;if(r.bool()){r.str();complete=r.region(()=>{r.f64();return r.bool();});}
-   const triggerMet=r.bool();if(complete&&saveTaskCountable(task,triggerMet))done.push(task);
+   const goal=byKey.get('MasteryGuildTask/'+shortId(task))?.obj;
+   const activeGoal=r.bool();
+   let complete=!goal?.Goal;if(activeGoal){r.str();complete=r.region(()=>{r.f64();return r.bool();});}
+   const triggerMet=r.bool();
+   // shortcut: condition goals are evaluated by the game; keep them visible until their state can be verified from the save.
+   if(goal&&!goal.ConditionGoal&&complete&&(!goal.TriggerGoal||triggerMet))done.push(task);
   });}
   save.tasks[entity]=done;
  }else if(entity==='Shop'&&component==='Shop'){
@@ -80,8 +83,6 @@ function readSaveComponent(r,save,entity,component,end){
   for(let n=r.count();n>0;n--){const amount=r.i32();save.shop[r.str()]=amount;}
  }else if(entity==='Astrology'&&component==='Action')readSaveAstrology(r,save);
 }
-// Tasks with a condition goal need live game state to confirm; count them only when they have no condition.
-function saveTaskCountable(task,triggerMet){const o=byKey.get('MasteryGuildTask/'+shortId(task))?.obj;return !!o&&!o.ConditionGoal&&(!o.TriggerGoal||triggerMet);}
 
 // AstrologyActionComponent: ActionComponent (IsStarted), TickTimer (bool + 3 × int32), two view flags,
 // then one region per constellation: knowledge, unlocked minor nodes, unlocked major nodes.

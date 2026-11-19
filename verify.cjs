@@ -14,9 +14,10 @@ for(const asset of new Set(Object.values(data.icons))){
  assert.ok(fs.statSync(path.join(output,asset)).size>0,asset);
 }
 const nodes = new Map();
+let detailChange;
 function element(id) {
   if (!nodes.has(id)) nodes.set(id, {value:'',innerHTML:'',textContent:'',dataset:{},hidden:true,classList:{toggle(){},remove(){}},
-    appendChild(){},addEventListener(){},insertAdjacentHTML(pos,html){this.innerHTML+=html;},setAttribute(){},removeAttribute(){},
+    appendChild(){},addEventListener(type,fn){if(id==='detail'&&type==='change')detailChange=fn;},insertAdjacentHTML(pos,html){this.innerHTML+=html;},setAttribute(){},removeAttribute(){},
     querySelector(){return null;},querySelectorAll(){return [];},scrollTop:0});
   return nodes.get(id);
 }
@@ -257,15 +258,17 @@ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/产物
  const ns='MelvorBase:';
  i32(31);w.push(Buffer.alloc(16));str('Tester');str('Standard');i64(0);for(let k=0;k<4;k++)str('');i32(321);i64(0);i64(0);u8(0);
  const entity=(id,components)=>{str(ns+id);region(()=>{i32(components.length);for(const [cid,fill] of components){str(cid);region(fill);}});};
- i32(4);
+ const task=(id,goal,complete,trigger)=>{str(ns+id);region(()=>{u8(goal!==null?1:0);if(goal!==null){str(goal);region(()=>{f64(complete?200:0);u8(+complete);});}u8(+trigger);});};
+ i32(5);
  entity('Woodcutting',[
   ['Experience',()=>f64(13034431)],// level 99
   ['Toolbelt',()=>{i32(1);str(ns+'WoodcuttingTool');region(()=>{i32(1);u8(1);str(ns+'ReinforcedWoodcuttersAxe');});}],
   ['Pets',()=>{i32(1);str(ns+'Woody');region(()=>{u8(0);u8(0);});}],
-  ['MasteryGuild',()=>{u8(0);i32(0);}],
+  ['MasteryGuild',()=>{u8(0);i32(3);task('WoodcuttingTask1','0',true,true);task('WoodcuttingTask2','1',false,true);task('WoodcuttingTask43',null,false,true);}],
   ['Unknown',()=>{i32(7);str('skipped by size');}]
  ]);
- entity('Shop',[['Shop',()=>{u8(1);u8(0);u8(1);i32(0);i32(0);i32(2);i32(1);str(ns+'WoodenAxeHandle');i32(1);str(ns+'OakAxeHandle');}]]);
+ entity('Ranching',[['MasteryGuild',()=>{u8(0);i32(2);task('RanchingTask201',null,false,true);task('RanchingTask202',null,false,false);}]]);
+ entity('Shop',[['Shop',()=>{u8(1);u8(0);u8(1);i32(0);i32(0);i32(4);for(const [id,n] of [['WoodenAxeHandle',1],['OakAxeHandle',1],['Cheese',5],['BananaTreeSeed',50]]){i32(n);str(ns+id);}}]]);
  entity('Astrology',[['Action',()=>{u8(0);u8(1);i32(0);i32(166);i32(0);u8(0);u8(1);i32(1);str(ns+'Deedree');region(()=>{f64(10);i32(1);str(ns+'DeedreeA1');i32(0);});}]]);
  entity('NotAnEntity',[['Anything',()=>{f64(1);}]]);
  const raw=Buffer.concat(w),packed=zlib.brotliCompressSync(raw),exported=packed.toString('base64');
@@ -279,6 +282,8 @@ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/产物
  assert.equal(save.version,31);assert.equal(save.character,'Tester');assert.equal(save.totalLevel,321);
  assert.equal(save.toolbelt.Woodcutting[ns+'WoodcuttingTool'].item,ns+'ReinforcedWoodcuttersAxe');
  assert.deepEqual(save.pets.Woodcutting,[]);// locked pet
+ assert.deepEqual(save.tasks.Woodcutting,[ns+'WoodcuttingTask1']);
+ assert.deepEqual(save.tasks.Ranching,[ns+'RanchingTask201']);
  assert.equal(save.shop[ns+'WoodenAxeHandle'],1);assert.deepEqual(save.astrology[ns+'Deedree'],[ns+'DeedreeA1']);
  assert.equal(run('saveLevel("Woodcutting",'+JSON.stringify(save)+')'),99);
  for(const bad of ['','not base64!','QUJD'])assert.throws(()=>run('decodeSaveString('+JSON.stringify(bad)+')'),bad);
@@ -303,8 +308,32 @@ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/产物
  run('showSkill("Woodcutting")');
  assert.match(element('detail').innerHTML,/已按存档“Tester”计算/);assert.match(element('detail').innerHTML,/XP（存档）/);
  assertPlayerPage();
+ const hasRow=(markup,key)=>new RegExp('<tr><td[^>]*>(?:<img[^>]*>)?<a href="#'+encodeURIComponent(key)+'"').test(markup);
+ const setHide=checked=>{detailChange({target:{id:'save-progress-hide',checked}});return element('save-progress-results').innerHTML;};
+ assert.match(element('detail').innerHTML,/隐藏已完成的任务/);
+ assert.ok(hasRow(element('detail').innerHTML,'MasteryGuildTask/WoodcuttingTask1'));
+ const tasks=setHide(true);
+ assert.ok(!hasRow(tasks,'MasteryGuildTask/WoodcuttingTask1'));
+ for(const id of ['WoodcuttingTask2','WoodcuttingTask43'])assert.ok(hasRow(tasks,'MasteryGuildTask/'+id),id);
+ run('showSkill("Ranching")');
+ assert.ok(!hasRow(element('detail').innerHTML,'MasteryGuildTask/RanchingTask201'));
+ assert.ok(hasRow(element('detail').innerHTML,'MasteryGuildTask/RanchingTask202'));
+ run('browse("MasteryGuildTask")');
+ assert.ok(!hasRow(element('detail').innerHTML,'MasteryGuildTask/WoodcuttingTask1'));
+ assert.ok(hasRow(setHide(false),'MasteryGuildTask/WoodcuttingTask1'));
+ run('saveProgressList("MasteryGuildTask",[byKey.get("MasteryGuildTask/WoodcuttingTask1")],()=>"task")');
+ assert.match(setHide(true),/没有剩余精通任务/);
+ setHide(false);
+ run('browse("ShopPurchase")');
+ assert.match(element('detail').innerHTML,/隐藏已购买的一次性条目/);
+ const shop=setHide(true);
+ assert.ok(!hasRow(shop,'ShopPurchase/WoodenAxeHandle'));
+ for(const id of ['CopperPickaxe','Cheese','BananaTreeSeed'])assert.ok(hasRow(shop,'ShopPurchase/'+id),id);
+ assert.ok(hasRow(setHide(false),'ShopPurchase/WoodenAxeHandle'));
  run('playerSave=null;playerBoostsMemo=null;showSkill("Woodcutting")');
  assert.doesNotMatch(element('detail').innerHTML,/XP（存档）/);assert.match(element('detail').innerHTML,/基础 XP/);
+ assert.doesNotMatch(element('detail').innerHTML,/save-progress-hide/);
+ run('browse("ShopPurchase")');assert.doesNotMatch(element('detail').innerHTML,/save-progress-hide/);
 }
 // Exact game values are regression fixtures for one executable build.
 if (referenceSnapshot) {
