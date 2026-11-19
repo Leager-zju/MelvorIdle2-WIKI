@@ -223,8 +223,22 @@ assert.match(orReq,/<li>[^]*?等级 8 <b class="or">或<\/b> [^]*?等级 6<\/li>
 assert.doesNotMatch(orReq,/或：/);
 assert.equal(run('xpForLevel(2)'),83);
 assert.equal(run('xpForLevel(99)'),13034427);
+// Every recipe table carries the expected product value column, and values are finite and non-negative.
+for(const type of JSON.parse(run('JSON.stringify(types.filter(t=>/Recipe$/.test(t)&&playerTypes.has(t)))'))){
+ run('browse('+JSON.stringify(type)+')');assert.match(element('detail').innerHTML,/产物期望价值/,type);
+ assert.equal(run('entries.filter(e=>e.type==='+JSON.stringify(type)+').every(e=>{const v=recipeValue(e);return Number.isFinite(v)&&v>=0;})'),true,type);
+}
+run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/产物期望价值/);
 // Exact game values are regression fixtures for one executable build.
 if (referenceSnapshot) {
+ // Expected product value per action from base chances and sell prices (hand-checked against v0.11.6 data).
+ const near=(code,expected)=>{const actual=run(code);assert.ok(Math.abs(actual-expected)<1e-9,code+' = '+actual+', expected '+expected);};
+ near('recipeValue(byKey.get("WoodcuttingRecipe/NormalTree"))',3+3*0.0025*28);// log per cut + bird nest per hit × 3 hits
+ near('recipeValue(byKey.get("MiningRecipe/Stone"))',0.4*2);
+ near('recipeValue(byKey.get("FishingRecipe/ShallowPools"))',0.8*5+0.2*5+0.01*1);// fish, junk on a miss, bait box
+ near('recipeValue(byKey.get("ThievingRecipe/Citizen"))',0.85*7.5+0.105*2+0.045*5+0.0001*1+0.0099*178);
+ near('recipeValue(byKey.get("ArtisanRecipe/StoneSword"))',11);
+ run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/3\.21 金币/);
  const golbin=JSON.parse(run(`JSON.stringify(compileCombatEnemy(byKey.get('Enemy/Golbin'),${combatPlayer}))`));
  assert.deepEqual(golbin.limits,[]);
  assert.equal(golbin.profiles[0].hp,20);

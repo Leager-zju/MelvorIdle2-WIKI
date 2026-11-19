@@ -573,7 +573,20 @@ function recipeTime(e){const o=e.obj;
  if(['CookingRecipe','FiremakingRecipe','FarmingRecipe','MiningRecipe'].includes(e.type))return o.BaseInterval;
  return null;
 }
-function recipeRows(list){return list.map(e=>{const ms=recipeTime(e),outputs=sourceRows.filter(r=>r.entry===e&&/主要|产出|完成配方/.test(r.basis));return [cell(e.title,eLink(e)+'<small class="en">'+esc(e.en)+'</small>'),cell(levelOf(e.obj),gateText(e)),cell(e.obj.BaseExperience??'',fmt(e.obj.BaseExperience)),cell(ms??'',ms?fmt(ms/1000)+' 秒':'见详情'),cell(ms&&e.obj.BaseExperience?e.obj.BaseExperience*3600000/ms:'',ms&&e.obj.BaseExperience?fmt(e.obj.BaseExperience*3600000/ms):'—'),cell('',outputs.map(r=>refLink(r.item,'Item')+' × '+quantity(r)).join('<br>')),cell('',e.obj.Ingredients?render(e.obj.Ingredients):'—')];});}
+// Expected gold from selling one action's products (one cut / catch / craft / successful pickpocket).
+// shortcut: base chances only, ignores doubling / preservation / boosts and ingredient cost, add when a net-profit view is needed.
+function recipeValue(e){const o=e.obj,gold=id=>itemEntry(id)?.obj.SellsFor?.Quantity||0;
+ let value=0;
+ for(const r of sourceRows.filter(r=>r.entry===e&&r.chance!=null&&!/完成战利品/.test(r.basis)))
+  value+=r.chance*((r.min+r.max)/2)*gold(r.item)*(e.type==='WoodcuttingRecipe'&&r.basis==='每次命中'?o.BaseMaxHealth:1);
+ if(e.type==='FishingRecipe'&&o.JunkItem)value+=(1-(o.FishChance??1))*gold(o.JunkItem);
+ const c=o.CurrencyReward;if(c&&shortId(c.Currency)==='GoldPieces')value+=(o.BaseCurrencyLootChance??1)*((c.MinQuantity??c.Quantity)+(c.MaxQuantity??c.Quantity))/2;
+ return value;
+}
+function recipeValueCell(e){const v=recipeValue(e),ms=recipeTime(e);return cell(v,v?fmt(v)+' 金币'+(ms?'<small class="en">约 '+fmt(v*3600000/ms)+' 金币/小时</small>':''):'—');}
+const recipeHeaders=['目标 / 配方','解锁条件','基础 XP','基础周期','基础 XP/h','产物','产物期望价值','材料'];
+const recipeValueNote='产物期望价值：按基础概率与出售价格估算每次动作的产物售价（扒窃按每次成功计），下方为按基础周期折算的每小时金币；未计翻倍、保留、加成和材料成本。';
+function recipeRows(list){return list.map(e=>{const ms=recipeTime(e),outputs=sourceRows.filter(r=>r.entry===e&&/主要|产出|完成配方/.test(r.basis));return [cell(e.title,eLink(e)+'<small class="en">'+esc(e.en)+'</small>'),cell(levelOf(e.obj),gateText(e)),cell(e.obj.BaseExperience??'',fmt(e.obj.BaseExperience)),cell(ms??'',ms?fmt(ms/1000)+' 秒':'见详情'),cell(ms&&e.obj.BaseExperience?e.obj.BaseExperience*3600000/ms:'',ms&&e.obj.BaseExperience?fmt(e.obj.BaseExperience*3600000/ms):'—'),cell('',outputs.map(r=>refLink(r.item,'Item')+' × '+quantity(r)).join('<br>')),recipeValueCell(e),cell('',e.obj.Ingredients?render(e.obj.Ingredients):'—')];});}
 function rankRewards(bonuses,rankId){
  return bonuses.filter(b=>(b.obj.Requirements||[]).some(r=>r.Data?.Rank===rankId)).map(b=>{
   const effects=(boostByOwner.get(b.key)||[]).map(r=>esc(effectText(r.m))+(r.m.Condition?'（'+render(r.m.Condition)+'）':''));
@@ -624,7 +637,7 @@ function skillSections(list,skillOf,renderPart,{tag='h3',other='其他'}={}){
 function showSkill(id){
  const s=skillById.get(id);if(!s){wikiHome();return;}current='';updateList();
  const recipes=configEntries(id,'Recipes');const tabs=['Recipes','Animals','Courses','Constellations','MasteryGuildRanks','MasteryGuildBonuses','MasteryGuildTasks','Pets'];
- $('detail').innerHTML='<div class="breadcrumb">'+pageLink('@skills','技能总览')+'</div><h2>'+icon(s.entry,42)+esc(s.title)+'</h2><p>'+esc(s.entry.en)+' · '+boostLink(id)+' · '+pageLink('@guides','训练与解锁指南')+'</p><div class="note"><b>查看本技能的全部加成来源：</b> '+boostLink(id)+'。经验、间隔、翻倍、保留、收益和特殊效果均可按来源筛选。</div><h3>技能解锁条件</h3>'+gateText(s.entry)+(recipes.length?'<h3>配方与等级解锁</h3><p class="muted">基础周期：伐木按生命值次命中、工匠按步骤计时；钓鱼使用平均间隔。未计加成、失败、额外等待与银行满等中断。基础 XP/h 是该假设下的参考值。</p>'+dataTable(['目标 / 配方','解锁条件','基础 XP','基础周期','基础 XP/h','产物','材料'],recipeRows(recipes),'recipes'):'')+tabs.filter(f=>f!=='Recipes').map(field=>{if(field==='MasteryGuildRanks')return masterySection(id);if(field==='MasteryGuildBonuses')return '';const list=configEntries(id,field);return list.length?'<section><h3>'+esc(({Animals:'动物',Courses:'敏捷路线',Constellations:'星座',MasteryGuildRanks:'精通阶级',MasteryGuildBonuses:'精通奖励',MasteryGuildTasks:'精通任务',Pets:'宠物'})[field])+' · '+list.length+'</h3>'+dataTable(field==='MasteryGuildTasks'?masteryTaskHeaders:skillDetailHeaders,skillDetailRows(list))+'</section>':'';}).join('');
+ $('detail').innerHTML='<div class="breadcrumb">'+pageLink('@skills','技能总览')+'</div><h2>'+icon(s.entry,42)+esc(s.title)+'</h2><p>'+esc(s.entry.en)+' · '+boostLink(id)+' · '+pageLink('@guides','训练与解锁指南')+'</p><div class="note"><b>查看本技能的全部加成来源：</b> '+boostLink(id)+'。经验、间隔、翻倍、保留、收益和特殊效果均可按来源筛选。</div><h3>技能解锁条件</h3>'+gateText(s.entry)+(recipes.length?'<h3>配方与等级解锁</h3><p class="muted">基础周期：伐木按生命值次命中、工匠按步骤计时；钓鱼使用平均间隔。未计加成、失败、额外等待与银行满等中断。基础 XP/h 是该假设下的参考值。'+recipeValueNote+'</p>'+dataTable(recipeHeaders,recipeRows(recipes),'recipes'):'')+tabs.filter(f=>f!=='Recipes').map(field=>{if(field==='MasteryGuildRanks')return masterySection(id);if(field==='MasteryGuildBonuses')return '';const list=configEntries(id,field);return list.length?'<section><h3>'+esc(({Animals:'动物',Courses:'敏捷路线',Constellations:'星座',MasteryGuildRanks:'精通阶级',MasteryGuildBonuses:'精通奖励',MasteryGuildTasks:'精通任务',Pets:'宠物'})[field])+' · '+list.length+'</h3>'+dataTable(field==='MasteryGuildTasks'?masteryTaskHeaders:skillDetailHeaders,skillDetailRows(list))+'</section>':'';}).join('');
  $('detail').scrollTop=0;
 }
 function relatedTable(e,kind){const id=G.Namespace+':'+e.obj.Id,opts={tag:'h4'};
@@ -661,7 +674,7 @@ function browse(type){
  if(type==='MasteryGuildRank'||type==='MasteryGuildBonus')return masteryTablePage();
  const list=entries.filter(e=>e.type===type);current='';updateList();
  let headers=['名称','分类','等级 / 条件','出售价格'],toRows=part=>part.map(e=>[cell(e.title,eLink(e)+'<small class="en">'+esc(e.en)+'</small>'),cell(shortId(e.obj.Category)||typeNames[type]||type,render(e.obj.Category||e.obj.Capabilities?.['MelvorBase:Equipment']?.Type||typeNames[type]||type)),cell(levelOf(e.obj),gateText(e)),cell(e.obj.SellsFor?.Quantity??'',e.obj.SellsFor?render(e.obj.SellsFor):'—')]);
- if(/Recipe$/.test(type)){headers=['目标 / 配方','解锁','基础 XP','基础周期','基础 XP/h','产物','材料'];toRows=recipeRows;}
+ if(/Recipe$/.test(type)){headers=recipeHeaders;toRows=recipeRows;}
  if(type==='Enemy'){headers=['敌人','等级属性','元素','掉落表'];toRows=part=>part.map(e=>[cell(e.title,eLink(e)),cell('',render(e.obj.Levels)),cell(shortId(e.obj.Element),render(e.obj.Element)),cell('',pageLink(e.key,'查看掉落与区域'))]);}
  if(type==='ShopPurchase'){headers=['商店项目','费用','解锁条件','提供'];toRows=part=>part.map(e=>[cell(e.title,eLink(e)),cell('',render(e.obj.Costs)),cell(levelOf(e.obj),gateText(e)),cell('',render(e.obj.Provides))]);}
  if(type==='Pet'||type==='MasteryGuildTask'){headers=type==='MasteryGuildTask'?masteryTaskHeaders:skillDetailHeaders;toRows=skillDetailRows;}
@@ -670,7 +683,7 @@ function browse(type){
  const table=part=>dataTable(headers,toRows(part));
  const body=type==='ShopPurchase'?shopSections(list,table):skillOf?skillSections(list,skillOf,table,{other:type==='Item'?'其他物品（非技能产出）':'其他'}):dataTable(headers,toRows(list),'browse');
  const grouping=type==='ShopPurchase'?' · 按商店类别与子类别分区':skillOf?' · 按技能分区':'';
- $('detail').innerHTML='<h2>'+esc(typeNames[type]||type)+'</h2><p>'+list.length+' 个条目'+grouping+' · 所有列可排序，支持表内筛选与导出。</p>'+body;$('detail').scrollTop=0;
+ $('detail').innerHTML='<h2>'+esc(typeNames[type]||type)+'</h2><p>'+list.length+' 个条目'+grouping+' · 所有列可排序，支持表内筛选与导出。</p>'+(/Recipe$/.test(type)?'<p class="muted">'+recipeValueNote+'</p>':'')+body;$('detail').scrollTop=0;
 }
 function showSkills(){current='';updateList();$('detail').innerHTML='<h2>技能总览</h2><p>查看技能的解锁要求、配方、训练与相关效果。</p><div class="skillgrid">'+skillEntries.map(s=>'<article>'+icon(s.entry,38)+'<h3>'+skillLink(s.id)+'</h3><small>'+esc(s.entry.en)+'</small><p>'+configEntries(s.id,'Recipes').length+' 个配方</p></article>').join('')+'</div>';}
 const storage={get(key,fallback){try{return JSON.parse(localStorage.getItem('melvor2-wiki-'+key))??fallback;}catch{return fallback;}},set(key,value){try{localStorage.setItem('melvor2-wiki-'+key,JSON.stringify(value));}catch{}}};
