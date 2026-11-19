@@ -138,3 +138,15 @@ h4.skill-group-title{margin:16px 0 4px;color:#c7e9db}
 .link-preview p{margin:7px 0 0}
 .link-preview p b{color:var(--muted)}
 @media print{.link-preview{display:none}}
+
+.combat-setup,.combat-stat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:14px;row-gap:8px;align-items:start}
+.combat-stat-side{display:grid;gap:12px;min-width:0}
+.combat-stat-card.calcform{display:grid;gap:6px;min-inline-size:0;margin:0;padding:8px 12px 12px}
+.combat-stat-card legend{padding:0 5px;color:var(--accent);font-weight:600}
+.combat-setup label,.combat-stat-card.calcform label{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,46%);align-items:center;gap:8px;font-size:13px}
+.combat-setup select,.combat-setup input,.combat-stat-card input,.combat-stat-card select{width:100%;min-width:0;max-width:none;padding:4px 7px}
+@media(max-width:980px){
+ .combat-setup,.combat-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .combat-stat-side{display:contents}
+}
+@media(max-width:600px){.combat-setup,.combat-stat-grid{grid-template-columns:minmax(0,1fr)}}

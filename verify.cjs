@@ -144,7 +144,11 @@ const assertPlayerPage = () => {
 };
 assert.match(element('wiki-nav').innerHTML,/#%40combat-simulator">战斗模拟器/);
 run('routePage("@combat-simulator")');
-assert.match(element('detail').innerHTML,/<h2>战斗模拟器<\/h2>[^]*?name="seconds"[^]*?name="evasion-Stab"[^]*?name="power-Normal"[^]*?name="protection-Normal"/);
+const combatPageHtml=element('detail').innerHTML;
+assert.match(combatPageHtml,/<h2>战斗模拟器<\/h2>[^]*?name="seconds"[^]*?name="evasion-Stab"[^]*?name="power-Normal"[^]*?name="protection-Normal"/);
+assert.deepEqual([...combatPageHtml.matchAll(/<fieldset class="calcform combat-stat-card"><legend>([^<]+)<\/legend>/g)].map(m=>m[1]),
+ ['进攻属性','躲避值','战力与防护','生命与护甲']);
+assert.match(combatPageHtml,/<h3>战斗属性<\/h3>[^]*?<label><span>攻击间隔（秒）<\/span><input[^>]+name="interval"/);
 assertPlayerPage();
 assert.equal(run('combatKernel.hitChance(300,600)'),.25);
 assert.equal(run('combatKernel.hitChance(600,300)'),.75);
