@@ -52,6 +52,7 @@ python update.py
 ### 发布（GitHub Pages）
 
 - 仓库 <https://github.com/Leager-zju/MelvorIdle2-WIKI>，`wiki/` 目录即仓库根。Windows 更新端检测 `main` 推送并构建，`.github/workflows/pages.yml` 验证成品再部署，站点 <https://leager-zju.github.io/MelvorIdle2-WIKI/>。
+- 本项目的改动在通过必要验证后，提交并直接推送到 `origin/main`，无需逐次确认。用户指定其他分支或要求仅保留本地时，以当次指令为准。推送到 `main` 后核对 Pages 部署结果。
 - 提交身份：`Leager <1004729740@qq.com>`（只在本仓库 `git config` 设置，不改全局）。
 - 生成的 `index.html`、`assets/`、离线 ZIP 和报告不提交到 Git。Pages 产物保留 `sitemap.xml` 和搜索引擎站点验证文件。
 - Windows 更新端从 Steam 公开分支元数据取得目标 Build ID，并以已安装的 Steam manifest 确认更新完成。只上传已经验证的离线成品 ZIP 到专用草稿供 Actions 读取。游戏原始文件、解包目录和独立数据包不得上传。
