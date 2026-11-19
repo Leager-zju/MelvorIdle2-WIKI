@@ -3487,9 +3487,10 @@ $('save-import').addEventListener('click',()=>importSave(()=>decodeSaveString($(
 const SAVE_DIR='%APPDATA%\\Games By Malcs\\Melvor Idle 2\\steam';
 $('save-dir').textContent=SAVE_DIR;
 $('save-pick').addEventListener('click',()=>{
- Promise.resolve().then(()=>navigator.clipboard.writeText(SAVE_DIR))
-  .then(()=>updateSaveControls('已复制存档目录：在弹出窗口的地址栏按 Ctrl+V 再回车。'),()=>updateSaveControls('无法自动复制，请手动复制上方路径到弹出窗口的地址栏。'))
-  .finally(()=>$('save-file').click());
+ // Start both inside the click: each needs the user's gesture, and awaiting the copy could get the dialog blocked.
+ let copy;try{copy=navigator.clipboard.writeText(SAVE_DIR);}catch(error){copy=Promise.reject(error);}
+ copy.then(()=>updateSaveControls('已复制存档目录：在弹出窗口的地址栏按 Ctrl+V 再回车。'),()=>updateSaveControls('无法自动复制，请手动复制上方路径到弹出窗口的地址栏。'));
+ $('save-file').click();
 });
 $('save-file').addEventListener('change',event=>{const file=event.target.files[0];event.target.value='';if(file)importSave(async()=>decompressSave(new Uint8Array(await file.arrayBuffer())));});
 $('save-clear').addEventListener('click',()=>{clearPlayerSave();updateSaveControls('已清除存档，表格恢复基础值。');routeWiki();});
