@@ -145,6 +145,26 @@ function combatDropValue(drops){
  },0);
 }
 
+function enemyCombatCard(entry){
+ const enemy=entry.obj,levels=new Map(enemy.Levels.map(r=>[r.Key,r.Value]));
+ const stats=new Map(enemy.Stats.Stats.map(r=>[shortId(r.Stat),r.Value]));
+ const stances=enemy.Stances.map(r=>byKey.get('AttackStance/'+shortId(r.Stance)));
+ const styles=stances.map(stance=>byKey.get('CombatStyle/'+shortId(stance.obj.CombatStyle)));
+ const level=Math.max(1,...styles.map(style=>Math.floor(style.obj.CombatLevelRatios.reduce(
+  (total,r)=>total+(levels.get(r.Level)??1)*r.Ratio,0))));
+ const hp=10*(levels.get(styles[0].obj.MaxHitpointsLevel)??1);
+ const badge=(label,value,img)=>'<span class="enemy-stat">'+img+'<span>'+esc(label)+' <b>'+esc(value)+'</b></span></span>';
+ const statBadge=(label,value,path)=>badge(label,value,icon({obj:{Icon:'res://Assets/'+path+'.png'}},16));
+ const special=[['Armour','Icons/Defence_64'],['MaximumWard','Items/WardingShield'],['Lifesteal','Icons/Lifesteal']]
+  .filter(([id])=>stats.get(id)).map(([id,path])=>statBadge(titleOf('CombatStat',id),id==='Lifesteal'?pct(stats.get(id)):fmt(stats.get(id)),path));
+ const element=byKey.get('Element/'+shortId(enemy.Element));
+ return '<details class="enemy-combat"><summary>战斗属性</summary><div class="enemy-combat-stats">'+
+  statBadge('战斗等级',fmt(level),'Icons/Combat_64')+statBadge('生命值',fmt(hp),'Icons/Hitpoints')+special.join('')+
+  stances.map((stance,i)=>badge(styles[i].title+' ·',stance.title,icon(styles[i],16))).join('')+
+  badge('元素',element.title,icon(element,16))+statBadge('攻击间隔',fmt(stats.get('AttackInterval')/1000)+' 秒','Icons/TimeInterval_48')+
+  '</div></details>';
+}
+
 function enemyAreaPage(){
  current='';updateList();
  const groups=[['CombatAreas','战斗区域'],['SlayerZones','屠杀者区域'],['DarkAreas','黑暗区域'],['Dungeons','地下城']];
@@ -157,10 +177,9 @@ function enemyAreaPage(){
     const item=byKey.get(row.key),chance=row.chance<.00005?'&lt;0.01%':pct(row.chance);
     return '<li><span>'+(item?icon(item,18)+link(item):'—')+'</span> <span class="drop-roll">× '+quantity(row)+' <span class="drop-chance">'+chance+'</span></span></li>';
    }).join('')+'</ul>':'—';
-   const levels=(e.obj.Levels||[]).map(r=>skillLink(shortId(r.Key))+' '+fmt(r.Value));
-   return [cell(e.title,eLink(e)+'<small class="en">'+esc(e.en)+'</small>'),cell('',items),cell(value,fmt(value)+' 金币'),cell('',(levels.length?levels.join('、')+'<br>':'')+render(e.obj.Element))];
+   return [cell(e.title,eLink(e)+'<small class="en">'+esc(e.en)+'</small>'),cell('',items),cell(value,fmt(value)+' 金币'),cell('',enemyCombatCard(e))];
   });
-  return dataTable(['敌人','掉落物、数量与概率','单次击杀价值期望'+(playerSave?'（存档）':''),'等级属性与元素'],rows,undefined,'enemy-area-table');
+  return dataTable(['敌人','掉落物、数量与概率','单次击杀价值期望'+(playerSave?'（存档）':''),'战斗属性'],rows,undefined,'enemy-area-table');
  }
  for(const area of configEntries('Combat','Areas')){
   if(area.type!=='CombatArea'&&area.type!=='Dungeon')continue;

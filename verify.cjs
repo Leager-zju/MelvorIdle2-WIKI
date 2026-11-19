@@ -170,7 +170,8 @@ run('indexPage()');assert.doesNotMatch(element('detail').innerHTML,/%40table%2FM
 // Long tables scroll inside a fixed-height box; short ones don't.
 assert.match(run('dataTable(["a"],Array.from({length:16},(_,i)=>[cell(i)]))'),/class="tablewrap scroll" tabindex="0" role="region"/);
 assert.doesNotMatch(run('dataTable(["a"],Array.from({length:15},(_,i)=>[cell(i)]))'),/tablewrap scroll/);
-assert.doesNotMatch(run('boostCards(boostsFor("Thieving"))'),/<details(?! open)/);
+assert.match(run('boostCards(boostsFor("Thieving"))'),/<details><summary>/);
+assert.doesNotMatch(run('boostCards(boostsFor("Thieving"))'),/<details open/);
 assert.equal(run('allBoostRecords.filter(r=>!r.skills.length).length'),0);
 assert.equal(run('dropStats(1,0,.95).atLeast'),0);
 assert.equal(run('dropStats(0,100,.95).needed'),Infinity);
@@ -477,6 +478,18 @@ if (referenceSnapshot) {
  assert.match(enemyGroup('Dungeons'),/Dungeon%2FHobgolbinCamp[^]*?Enemy%2FGolbin[^]*?<td data-value="">—<\/td><td data-value="0">0 金币<\/td>/);
  assert.equal(new Set([...enemyPage.matchAll(/<tr><td[^>]*>(?:<img[^>]*>)?<a href="#Enemy%2F([^"]+)"/g)].map(m=>m[1])).size,192);
  assert.doesNotMatch(enemyPage,/每小时|魔法树篝火/);
+ const rollerCard=run('enemyCombatCard(byKey.get("Enemy/BlackstoneRoller"))');
+ assert.match(rollerCard,/^<details class="enemy-combat"><summary>战斗属性<\/summary>/);
+ for(const label of ['战斗等级 <b>58</b>','生命值 <b>520</b>','盔甲 <b>80</b>','近战 · <b>格挡</b>','元素 <b>中立</b>','攻击间隔 <b>2.5 秒</b>']){
+  assert.ok(rollerCard.includes(label),label);
+ }
+ assert.equal((rollerCard.match(/class="icon" src="assets\//g)||[]).length,6);
+ assert.match(run('enemyCombatCard(byKey.get("Enemy/Vampire"))'),/吸血 <b>10%<\/b>/);
+ assert.match(run('enemyCombatCard(byKey.get("Enemy/WillOWisp"))'),/最大守护值 <b>10<\/b>/);
+ assert.ok(enemyPage.includes(rollerCard));
+ run('showWikiEntry("Enemy/BlackstoneRoller")');
+ assert.ok(element('detail').innerHTML.includes(rollerCard));
+ assert.doesNotMatch(element('detail').innerHTML,/<h3>属性<\/h3>|<th scope="row">攻击间隔<\/th>/);
  assertPlayerPage();
  assert.equal(run('skillOfEntry(byKey.get("MasteryGuildTask/WoodcuttingTask3"))'),'Woodcutting');
  assert.deepEqual(JSON.parse(run('JSON.stringify(G.Objects.MasteryGuildCategory.map(c=>[c.Id,c.BasePoints]))')),[['Novice',1],['Easy',2],['Adept',3],['Intermediate',5],['Hard',8],['Expert',12]]);

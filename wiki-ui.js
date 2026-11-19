@@ -76,9 +76,6 @@ function infoboxRows(e){
   const ms=recipeTime(e);if(ms)rows.push(['基础耗时',fmt(ms/1000)+' 秒']);
  }
  if(e.type==='Enemy'){
-  for(const l of o.Levels||[])rows.push([esc(skillName(shortId(l.Key))),fmt(l.Value)]);
-  const interval=o.Stats?.Stats?.find(s=>shortId(s.Stat)==='AttackInterval');if(interval)rows.push(['攻击间隔',fmt(interval.Value/1000)+' 秒']);
-  if(o.Element)rows.push(['元素',esc(titleOf('Element',o.Element))]);
   const areas=enemyAreas(e);if(areas.length)rows.push(['出没地点',areas.map(link).join('、')]);
  }
  if(e.type==='MasteryGuildRank')rows.push(['所需精通点数',fmt(masteryRankPoints(e,masteryTotalPoints(skillOfEntry(e))),0)]);
@@ -108,8 +105,8 @@ function capabilitySections(e){
 function showWikiEntry(key){
  const e=byKey.get(key);if(!e)return wikiHome();
  if(/NavigationOption$/.test(e.type)&&skillById.has(shortId(e.obj.Entity)))return showSkill(shortId(e.obj.Entity));
- const isItem=e.type==='Item',isMasteryTask=e.type==='MasteryGuildTask',isConstellation=e.type==='AstrologyConstellation';
- showEntry(key,['Description','CustomDescription','SellsFor','Requirements','UnlockRequirements','BaseExperience','BaseInterval','BaseMinInterval','BaseMaxInterval',...(isItem?['Capabilities']:[]),...(e.type==='Enemy'?['Levels','Element','DamageType']:[]),...(isMasteryTask?['Goal']:[]),...(isConstellation?['MajorNodes','MinorNodes','MinorNodeUnlockKnowledge']:[])]);
+ const isItem=e.type==='Item',isEnemy=e.type==='Enemy',isMasteryTask=e.type==='MasteryGuildTask',isConstellation=e.type==='AstrologyConstellation';
+ showEntry(key,['Description','CustomDescription','SellsFor','Requirements','UnlockRequirements','BaseExperience','BaseInterval','BaseMinInterval','BaseMaxInterval',...(isItem?['Capabilities']:[]),...(isEnemy?['Stats','Levels','Element','DamageType']:[]),...(isMasteryTask?['Goal']:[]),...(isConstellation?['MajorNodes','MinorNodes','MinorNodeUnlockKnowledge']:[])]);
  const details=(isMasteryTask?'<section><h3>要求 / 目标</h3>'+masteryTaskObjectives(e)+'</section>':'')+$('detail').innerHTML+(isConstellation?constellationNodeSections(e):'');
  const drops=sourceRows.filter(r=>r.entry===e);
  const loot=drops.length?'<section><h3>'+(isItem?'开启可获得':'产出与掉落')+'</h3>'+dataTable(['产物','获取方式','数量','基础概率'],drops.map(r=>[cell(itemEntry(r.item)?.title||r.item,refLink(r.item,'Item')),cell(r.basis),cell(r.min??'',quantity(r)),cell(r.chance??'',pct(r.chance))]))+'</section>':'';
@@ -117,7 +114,7 @@ function showWikiEntry(key){
  const body=isItem?'<section id="item-sources"><h3>物品来源</h3>'+relatedTable(e,'sources')+'</section><section id="item-uses"><h3>物品用途</h3>'+relatedTable(e,'uses')+'</section>'+equipmentSection(e)+entryBoosts(e)+capabilitySections(e)+loot:loot+entryBoosts(e)+details;
  $('detail').innerHTML='<div class="breadcrumb">'+pageLink('','首页')+' › '+pageLink('@table/'+e.type,typeNames[e.type]||humanWord(e.type))+'</div><h2>'+esc(e.title)+'</h2>'+
   '<div class="pageactions"><button id="bookmark" data-key="'+esc(key)+'">'+(favorites.includes(key)?'★ 取消收藏':'☆ 收藏此页')+'</button>'+pageLink('@links/'+key,'链入页面')+'</div>'+
-  infobox(e)+'<p class="lead">'+lead+'</p>'+body+'<div class="clear"></div>'+relatedNavbox(e);
+  infobox(e)+'<p class="lead">'+lead+'</p>'+(isEnemy?enemyCombatCard(e):'')+body+'<div class="clear"></div>'+relatedNavbox(e);
  remember(key);
 }
 

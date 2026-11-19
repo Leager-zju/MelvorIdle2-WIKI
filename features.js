@@ -204,7 +204,7 @@ function boostCards(records){
   return rows.length?'<section class="boost-section"><h3 id="boost-section-'+index+'">'+esc(group)+' · '+rows.length+'</h3>'+dataTable(['来源','来源类型','效果','数值','说明'],boostRowsHtml(rows),'boost-table-'+index,'boost-table')+'</section>':'';
  }).join('');
 }
-function boostRowsHtml(records){return records.map(r=>{const e=byKey.get(r.key),parents=grantingParents(e),title=(e.type==='AstrologyNode'&&parents.length?parents.map(p=>p.title).join(' / ')+' · ':'')+e.title;return [cell(title,icon(e)+pageLink(e.key,title)+'<small class="en">'+esc(e.en)+'</small>'),cell(sourceKind(r)),cell(effectText(r.m),'<b>'+esc(effectText(r.m))+'</b>'),cell(r.m.Value??r.m.Chance,esc(boostValue(r.m))),cell('', '<details open><summary>'+esc(title)+' · 生效条件与获取途径</summary>'+boostScope(r)+'<h4>获取途径</h4>'+acquisition(e)+'</details>')];});}
+function boostRowsHtml(records){return records.map(r=>{const e=byKey.get(r.key),parents=grantingParents(e),title=(e.type==='AstrologyNode'&&parents.length?parents.map(p=>p.title).join(' / ')+' · ':'')+e.title;return [cell(title,icon(e)+pageLink(e.key,title)+'<small class="en">'+esc(e.en)+'</small>'),cell(sourceKind(r)),cell(effectText(r.m),'<b>'+esc(effectText(r.m))+'</b>'),cell(r.m.Value??r.m.Chance,esc(boostValue(r.m))),cell('', '<details><summary>'+esc(title)+' · 生效条件与获取途径</summary>'+boostScope(r)+'<h4>获取途径</h4>'+acquisition(e)+'</details>')];});}
 let boostState={skill:'all',group:'',source:'',query:'',global:true};
 function boostsFor(skill){return allBoostRecords.filter(r=>skill==='all'||(skill==='unknown'?!r.skills.length:r.skills.includes(skill)));}
 function showBoosts(skill){

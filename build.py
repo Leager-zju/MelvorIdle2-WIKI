@@ -23,6 +23,9 @@ def load_icons(game, unpacked, assets):
     unpacked = unpacked.resolve()
     paths = {o.get(k) for objects in game['Objects'].values() for o in objects
              for k in ('Icon', 'Media', 'Sprite') if isinstance(o.get(k), str)} | {LOGO, FAVICON}
+    paths.update('res://Assets/Icons/'+name+'.png' for name in
+                 ('Combat_64', 'Hitpoints', 'Defence_64', 'Lifesteal', 'TimeInterval_48'))
+    paths.add('res://Assets/Items/WardingShield.png')
     for path in sorted(paths):
         if not path.startswith('res://'):
             continue
