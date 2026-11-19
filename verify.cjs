@@ -22,7 +22,8 @@ function element(id) {
 }
 element('payload').textContent = scripts[0][1];
 const context = vm.createContext({document:{getElementById:element,createElement:()=>element(Symbol()),body:element('body'),addEventListener(){},title:''},
-  window:{addEventListener(){},scrollTo(){}},MutationObserver:class {observe(){}},location:{hash:'',replace(){}},setTimeout,clearTimeout,console});
+  window:{addEventListener(){},scrollTo(){}},MutationObserver:class {observe(){}},location:{hash:'',replace(){}},setTimeout,clearTimeout,console,
+  atob:s=>Buffer.from(s,'base64').toString('latin1'),TextDecoder,localStorage:{getItem(){return null;},setItem(){}}});
 vm.runInContext(scripts[1][1], context);
 assert.match(html, /<link rel="icon" href="assets\/[0-9a-f]+\.(png|webp)">/);
 assert.match(html, /<img src="assets\/[0-9a-f]+\.(png|webp)" alt="Melvor Idle 2">/);
@@ -140,7 +141,8 @@ const rawContent = /<pre|<code|完整配置|原始 JSON|字段路径|组件配�
 const assertPlayerPage = () => {
  const text=element('detail').innerHTML.replace(/<[^>]*>/g,'');
  assert.doesNotMatch(text,rawContent);
- assert.ok(!/(?<![\w.])\d+\.\d{3,}(?![\d.])/.test(text),'player numbers have at most two decimal places');
+ // Tags become spaces so numbers in adjacent table cells are not read as one long decimal.
+ assert.ok(!/(?<![\w.])\d+\.\d{3,}(?![\d.])/.test(element('detail').innerHTML.replace(/<[^>]*>/g,' ')),'player numbers have at most two decimal places');
 };
 assert.match(element('wiki-nav').innerHTML,/#%40combat-simulator">战斗模拟器/);
 run('routePage("@combat-simulator")');
@@ -229,6 +231,60 @@ for(const type of JSON.parse(run('JSON.stringify(types.filter(t=>/Recipe$/.test(
  assert.equal(run('entries.filter(e=>e.type==='+JSON.stringify(type)+').every(e=>{const v=recipeValue(e);return Number.isFinite(v)&&v>=0;})'),true,type);
 }
 run('showSkill("Woodcutting")');assert.match(element('detail').innerHTML,/产物期望价值/);
+// ---- Save import: build a small version-31 save the way the game writes it, then read it back. ----
+{
+ const zlib=require('node:zlib');
+ const w=[];const i32=v=>{const b=Buffer.alloc(4);b.writeInt32LE(v);w.push(b);};const u8=v=>w.push(Buffer.from([v]));
+ const f64=v=>{const b=Buffer.alloc(8);b.writeDoubleLE(v);w.push(b);};const i64=v=>{const b=Buffer.alloc(8);b.writeBigInt64LE(BigInt(v));w.push(b);};
+ const str=s=>{const b=Buffer.from(s,'utf8');let n=b.length;const p=[];do{let x=n&0x7f;n>>=7;if(n)x|=0x80;p.push(x);}while(n);w.push(Buffer.from(p),b);};
+ const region=fill=>{const before=w.length;fill();const body=Buffer.concat(w.splice(before));i32(body.length);w.push(body);};
+ const ns='MelvorBase:';
+ i32(31);w.push(Buffer.alloc(16));str('Tester');str('Standard');i64(0);for(let k=0;k<4;k++)str('');i32(321);i64(0);i64(0);u8(0);
+ const entity=(id,components)=>{str(ns+id);region(()=>{i32(components.length);for(const [cid,fill] of components){str(cid);region(fill);}});};
+ i32(4);
+ entity('Woodcutting',[
+  ['Experience',()=>f64(13034431)],// level 99
+  ['Toolbelt',()=>{i32(1);str(ns+'WoodcuttingTool');region(()=>{i32(1);u8(1);str(ns+'ReinforcedWoodcuttersAxe');});}],
+  ['Pets',()=>{i32(1);str(ns+'Woody');region(()=>{u8(0);u8(0);});}],
+  ['MasteryGuild',()=>{u8(0);i32(0);}],
+  ['Unknown',()=>{i32(7);str('skipped by size');}]
+ ]);
+ entity('Shop',[['Shop',()=>{u8(1);u8(0);u8(1);i32(0);i32(0);i32(2);i32(1);str(ns+'WoodenAxeHandle');i32(1);str(ns+'OakAxeHandle');}]]);
+ entity('Astrology',[['Action',()=>{u8(0);u8(1);i32(0);i32(166);i32(0);u8(0);u8(1);i32(1);str(ns+'Deedree');region(()=>{f64(10);i32(1);str(ns+'DeedreeA1');i32(0);});}]]);
+ entity('NotAnEntity',[['Anything',()=>{f64(1);}]]);
+ const raw=Buffer.concat(w),exported=zlib.brotliCompressSync(raw).toString('base64');
+ context.SAVE_STRING=exported;
+ const save=JSON.parse(run('JSON.stringify(parseSave(decodeSaveString(SAVE_STRING)))'));
+ assert.equal(save.version,31);assert.equal(save.character,'Tester');assert.equal(save.totalLevel,321);
+ assert.equal(save.toolbelt.Woodcutting[ns+'WoodcuttingTool'].item,ns+'ReinforcedWoodcuttersAxe');
+ assert.deepEqual(save.pets.Woodcutting,[]);// locked pet
+ assert.equal(save.shop[ns+'WoodenAxeHandle'],1);assert.deepEqual(save.astrology[ns+'Deedree'],[ns+'DeedreeA1']);
+ assert.equal(run('saveLevel("Woodcutting",'+JSON.stringify(save)+')'),99);
+ for(const bad of ['','not base64!','QUJD'])assert.throws(()=>run('decodeSaveString('+JSON.stringify(bad)+')'),bad);
+ assert.throws(()=>run('parseSave(new Uint8Array([31,0,0,0]))'),/不完整|无法识别/);
+ // Recipe numbers: no save = base values; with the save, owned bonuses that match each recipe apply.
+ run('playerSave=null');
+ const base=JSON.parse(run('JSON.stringify(savedRecipeStats(byKey.get("WoodcuttingRecipe/NormalTree"),null))'));
+ assert.equal(base.xp,run('byKey.get("WoodcuttingRecipe/NormalTree").obj.BaseExperience'));
+ run('playerSave=parseSave(decodeSaveString(SAVE_STRING));playerBoostsMemo=null');
+ const owned=JSON.parse(run('JSON.stringify([...playerSources(playerSave).keys()])'));
+ for(const key of ['Item/ReinforcedWoodcuttersAxe','ShopPurchase/WoodenAxeHandle','ShopPurchase/OakAxeHandle','AstrologyNode/DeedreeA1'])assert.ok(owned.includes(key),key);
+ assert.ok(!owned.includes('Pet/Woody'),'locked pets give no bonus');
+ const stats=JSON.parse(run('JSON.stringify(savedRecipeStats(byKey.get("WoodcuttingRecipe/NormalTree"),playerSave))'));
+ const used=stats.applied.map(r=>r.key);
+ assert.ok(used.includes('ShopPurchase/WoodenAxeHandle')&&used.includes('AstrologyNode/DeedreeA1'),used.join());
+ assert.ok(stats.xp>base.xp&&stats.value>base.value,'owned XP / doubling bonuses raise the numbers');
+ assert.ok(stats.applied.every(r=>!r.m.Condition&&!r.m.FromContext),'conditional bonuses are excluded');
+ // Interval formulas follow each skill's game code: flat before percent (fishing), after percent (artisan).
+ assert.equal(run('scaledInterval(byKey.get("FishingRecipe/ShallowPools"),8000,-0.02,-6000)'),1960);
+ assert.equal(run('scaledInterval(byKey.get("ArtisanRecipe/StoneSword"),2000,-0.02,-100)'),1860);
+ assert.equal(run('savedRecipeTime(byKey.get("FishingRecipe/ShallowPools"),{percent:{min:-0.02,max:-0.02},flat:{max:-6000}})'),3920);
+ run('showSkill("Woodcutting")');
+ assert.match(element('detail').innerHTML,/已按存档“Tester”计算/);assert.match(element('detail').innerHTML,/XP（存档）/);
+ assertPlayerPage();
+ run('playerSave=null;playerBoostsMemo=null;showSkill("Woodcutting")');
+ assert.doesNotMatch(element('detail').innerHTML,/XP（存档）/);assert.match(element('detail').innerHTML,/基础 XP/);
+}
 // Exact game values are regression fixtures for one executable build.
 if (referenceSnapshot) {
  // Expected product value per action from base chances and sell prices (hand-checked against v0.11.6 data).
