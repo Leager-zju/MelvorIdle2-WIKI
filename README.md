@@ -3,7 +3,7 @@
 非官方中文玩家资料站，内容根据 Melvor Idle 2 游戏数据文件整理。
 
 - **在线访问**：<https://leager-zju.github.io/MelvorIdle2-WIKI/>
-- **离线使用**：下载本仓库，双击 `index.html` 用浏览器打开，无需联网或服务器。复制时同时带上 `index.html` 和 `assets/`。
+- **离线使用**：下载并解压成品 ZIP，双击其中的 `index.html` 即可在浏览器里离线使用。 [下载离线版](https://leager-zju.github.io/MelvorIdle2-WIKI/melvor-idle-2-wiki.zip)
 
 站点地图 [sitemap.xml](https://leager-zju.github.io/MelvorIdle2-WIKI/sitemap.xml) 提供首页的规范网址，供 Google Search Console、Bing Webmaster Tools 和百度搜索资源平台提交。
 
@@ -77,9 +77,13 @@ python update.py
 
 默认读取上一级目录的 `Melvor2.exe`。Wiki 放在其他目录时，可以运行 `python update.py "D:\SteamLibrary\steamapps\common\Melvor Idle 2\Melvor2.exe"`。
 
-脚本从游戏安装包重新解包数据、中文翻译和图标，生成整站并运行验证。通过后更新 `index.html`、`assets/` 和两份报告。所有页面都由这个 `index.html` 生成，双击即可浏览；发布到 GitHub Pages 仍需提交并推送。验证失败时保留当前站点。新版会继续做整站验证，精确数值回归适用于原有的 v0.11.6 游戏快照。
+脚本从游戏安装包重新解包数据、中文翻译和图标，生成整站并运行验证。通过后更新本地的 `index.html`、`assets/` 和两份报告。双击生成的 `index.html` 即可浏览。验证失败时保留本地上一次构建结果。精确数值回归适用于 v0.11.6 游戏快照。
 
 更新使用 `.wiki-update/` 临时目录，完成后自动清理。若进程被强制结束，确认没有更新在运行后，可移走残留的 `.wiki-update/` 再重试。原有的 `python extract.py`、`python build.py`、`node verify.cjs` 仍可用于分步维护，解包目录 `unpacked/` 由分步解包维护。提取器支持未加密的 PCK v3/v4。游戏如更改资源格式、字段结构或游戏机制，可能需要先调整脚本或 Wiki 逻辑。
+
+### 发布 Wiki
+
+推送源码到 `main` 后，GitHub Actions 使用固定的已发布 v0.11.6 Wiki 快照作为构建输入，验证成功后部署 Pages，并更新同一地址下的离线 ZIP。生成文件无需提交。游戏升级时可在本地运行 `update.py` 验证，线上数据更新需要先确定有权限的输入来源。 [构建与部署记录](https://github.com/Leager-zju/MelvorIdle2-WIKI/actions/workflows/pages.yml)
 
 自动验证覆盖玩家展示无内部字段、Boosts 仅在技能详情页有入口、全部对象渲染、全部技能 / Boosts 页面、修饰与触发数量、来源链、中英文搜索、掉落权重、经验曲线、生产、对比、CSV 转义和输入边界，统计见 `verification-report.json`。浏览器已验收 Boosts 来源筛选、占星来源链、数值排序、经验与掉率计算及技能导航；未逐个在游戏中实测所有加成。
 

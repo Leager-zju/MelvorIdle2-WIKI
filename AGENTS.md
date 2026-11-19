@@ -19,6 +19,7 @@
 | `update.py` | 从安装的 EXE 解包、构建并验证整个 Wiki，成功后替换生成产物 |
 | `extract.py` | 从 EXE 内 PCK 解包到 `unpacked/`（只支持未加密 PCK v3/v4） |
 | `build.py` | 读数据 / 翻译 / 版本，导出图标到 `assets/`，把 CSS 与 JS 内联进 `template.html`，生成 `index.html` |
+| `publish.py` | 读取已发布快照中的数据与图标，使用当前源码构建、验证并打包 GitHub Pages 产物和离线 ZIP |
 | `template.html` | 页面骨架：顶栏、左侧导航、正文、右侧目录、页脚 |
 | `style.css` | 全部样式 |
 | `app.js` | 数据载入、条目索引、反向引用、搜索、通用字段渲染 `showEntry` |
@@ -37,7 +38,7 @@
 
 **先改源码，再生成页面。** `index.html` 是构建产物，禁止直接编辑。数据提取、筛选和构建逻辑改对应的 Python 脚本，页面骨架改 `template.html`，渲染和交互改对应的 JavaScript，样式改 `style.css`。
 
-每次修改站点源码后，在 `wiki/` 目录运行一键更新，验证通过后才替换生成产物：
+本地需要从游戏安装包重建和预览时，在 `wiki/` 目录运行一键更新。脚本验证通过后才替换本地生成产物：
 
 ```powershell
 python update.py
@@ -49,9 +50,10 @@ python update.py
 
 ### 发布（GitHub Pages）
 
-- 仓库 <https://github.com/Leager-zju/MelvorIdle2-WIKI>，`wiki/` 目录即仓库根；GitHub Pages 从 `main` 分支根目录发布，站点 <https://leager-zju.github.io/MelvorIdle2-WIKI/>。
+- 仓库 <https://github.com/Leager-zju/MelvorIdle2-WIKI>，`wiki/` 目录即仓库根。推送到 `main` 触发 `.github/workflows/pages.yml` 构建、验证并部署，站点 <https://leager-zju.github.io/MelvorIdle2-WIKI/>。
 - 提交身份：`Leager <1004729740@qq.com>`（只在本仓库 `git config` 设置，不改全局）。
-- 发布的是生成好的 `index.html` + `assets/`，所以**改源码后必须先重建并验证，再一起提交 `index.html`**。
+- 生成的 `index.html`、`assets/`、离线 ZIP 和报告不提交到 Git。Pages 产物保留 `sitemap.xml` 和搜索引擎站点验证文件。
+- 工作流固定引用此前公开的 v0.11.6 Wiki 提交，只读取其中的数据和已发布图标。更新游戏数据时先确定有权限的构建输入来源，游戏原始文件不得上传。
 - `.gitignore` 排除 `unpacked/`（游戏解包文件，~500 MB）与 `mechanics-il.txt`（DLL 反汇编）——不得把游戏原始文件或反汇编提交到公开仓库。`.nojekyll` 必须保留。
 - 页面内只用相对路径（`assets/...`、`#...`），保证本地双击与 `/MelvorIdle2-WIKI/` 子路径下都能用。
 

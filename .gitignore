@@ -3,6 +3,11 @@ unpacked/
 .wiki-update/
 /.wiki-snapshot/
 /_site/
+# Generated Wiki files for local previews and verification.
+/index.html
+/assets/
+/extraction-report.json
+/verification-report.json
 # Disassembly of the game DLL; local reference only, not for redistribution.
 mechanics-il.txt
 # Build output of the optional IL tool
