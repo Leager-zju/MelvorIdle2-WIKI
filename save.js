@@ -65,7 +65,24 @@ function readSaveComponent(r,save,entity,component,end){
   save.toolbelt[entity]=slots;
  }else if(entity==='Combat'&&component==='Equipment'){
   // The active slots come before saved loadouts. Occupied secondary slots add no bonuses.
-  for(let n=r.count();n>0;n--){r.str();r.region(()=>{r.i32();const occupied=r.bool();if(r.bool()){const item=r.str();if(!occupied)save.equipment.push(item);}});}
+  save.combatWeapon=null;
+  for(let n=r.count();n>0;n--){const slot=shortId(r.str());r.region(()=>{r.i32();const occupied=r.bool();if(r.bool()){const item=r.str();if(!occupied){save.equipment.push(item);if(slot==='Weapon')save.combatWeapon=item;}}});}
+ }else if(entity==='Combat'&&component==='Player'&&save.version<=31){
+  // PlayerComponent writes three regions, then the inline idle, attack or stunned turn.
+  for(let i=0;i<3;i++)r.region(()=>{});
+  const turn=r.i32();
+  if(turn<0||turn>2)return;
+  r.bool();
+  if(turn===1){r.str();r.skip(29);} // Hit timer (13 bytes) and four counters.
+  if(turn===2){r.str();r.i32();}
+  r.skip(12);
+  for(let n=r.count();n>0;n--)r.str();
+  r.bool();
+  const stances=[];
+  for(let n=r.count();n>0;n--)stances.push([r.str(),r.str()]);
+  if(r.pos<=end)save.combatStances=Object.fromEntries(stances);
+ }else if(entity==='Combat'&&component==='MagicSpells'&&save.version<=31){
+  if(r.bool())save.combatSpell=r.str();
  }else if(component==='Pets'){
   const pets=[];for(let n=r.count();n>0;n--){const pet=r.str();r.region(()=>{if(r.bool())pets.push(pet);});}
   save.pets[entity]=pets;
@@ -188,12 +205,14 @@ function boostTotals(save,skill,e){
 let playerBoostsMemo=null;
 function playerBoostsCache(save){if(playerBoostsMemo?.save!==save)playerBoostsMemo={save,records:playerBoosts(save)};return playerBoostsMemo.records;}
 
+function equippedSaveBoosts(save){
+ return (save.equipment||[]).flatMap(id=>(boostByOwner.get('Item/'+shortId(id))||[])
+  .filter(r=>r.path.startsWith('Capabilities.MelvorBase:Equipment.Bonuses.')&&unconditionalSaveBoost(r)).map(r=>({...r,times:1})));
+}
 function savedCombatLoot(save){
  const chances={ItemDoublingChance:0,BuriableDoublingChance:0,CurrencyDoublingChance:0};
  if(!save)return chances;
- const equipped=(save.equipment||[]).flatMap(id=>(boostByOwner.get('Item/'+shortId(id))||[])
-  .filter(r=>r.path.startsWith('Capabilities.MelvorBase:Equipment.Bonuses.')&&unconditionalSaveBoost(r)).map(r=>({...r,times:1})));
- for(const {m,times} of [...playerBoostsCache(save),...equipped]){
+ for(const {m,times} of [...playerBoostsCache(save),...equippedSaveBoosts(save)]){
   const ctx=m.LocalContext,stat=m.Stat?.Name;
   if(m.Stat?.StatsType!==G.Namespace+':CombatLoot'||!(stat in chances)||ctx?.Component?.Entity!==G.Namespace+':Combat'||ctx.Component.Component!=='Loot')continue;
   if(Object.keys(ctx).some(k=>k!=='Component'&&ctx[k]!=null))continue;

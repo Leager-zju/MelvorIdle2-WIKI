@@ -307,7 +307,7 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
  i32(31);w.push(Buffer.alloc(16));str('Tester');str('Standard');i64(0);for(let k=0;k<4;k++)str('');i32(321);i64(0);i64(0);u8(0);
  const entity=(id,components)=>{str(ns+id);region(()=>{i32(components.length);for(const [cid,fill] of components){str(cid);region(fill);}});};
  const task=(id,goal,complete,trigger)=>{str(ns+id);region(()=>{u8(goal!==null?1:0);if(goal!==null){str(goal);region(()=>{f64(complete?200:0);u8(+complete);});}u8(+trigger);});};
- i32(7);
+ i32(8);
  entity('Woodcutting',[
   ['Experience',()=>f64(13034431)],// level 99
   ['Toolbelt',()=>{i32(1);str(ns+'WoodcuttingTool');region(()=>{i32(1);u8(1);str(ns+'ReinforcedWoodcuttersAxe');});}],
@@ -326,8 +326,13 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
  entity('Astrology',[['Action',()=>{u8(0);u8(1);i32(0);i32(166);i32(0);u8(0);u8(1);i32(2);str(ns+'Deedree');region(()=>{f64(10);i32(1);str(ns+'DeedreeA1');i32(0);});str(ns+'Hyden');region(()=>{f64(0);i32(0);i32(1);str(ns+'HydenMajor3');});}]]);
  entity('Combat',[
   ['Toolbelt',()=>{i32(1);str(ns+'CombatUtility');region(()=>{i32(1);u8(1);str(ns+'ScarabCharm');});}],
-  ['Equipment',()=>{i32(3);for(const [slot,item,occupied] of [['Amulet','GoldTopazAmulet',0],['RingSlot1','GoldTopazRing',0],['Cape','StripedCape',1]]){str(ns+slot);region(()=>{i32(1);u8(occupied);u8(1);str(ns+item);});}i32(0);}]
+  ['Equipment',()=>{i32(4);for(const [slot,item,occupied] of [['Amulet','GoldTopazAmulet',0],['RingSlot1','GoldTopazRing',0],['Weapon','StoneSword',0],['Offhand','StoneSword',1]]){str(ns+slot);region(()=>{i32(1);u8(occupied);u8(1);str(ns+item);});}i32(0);}],
+  ['Player',()=>{for(let k=0;k<3;k++)region(()=>i32(0));i32(1);u8(1);str(ns+'Normal');u8(0);for(let k=0;k<7;k++)i32(0);
+   i32(0);i64(0);i32(1);str(ns+'Slash');u8(0);
+   i32(1);str(ns+'Sword');str(ns+'Slash');i32(1);str(ns+'Loadout1');str(ns+'Stab');}],
+  ['MagicSpells',()=>{u8(1);str(ns+'AirStrike');u8(0);u8(0);u8(0);u8(0);i32(0);i32(0);}]
  ]);
+ entity('Hitpoints',[['Experience',()=>f64(1200)]]);
  entity('NotAnEntity',[['Anything',()=>{f64(1);}]]);
  const raw=Buffer.concat(w),packed=zlib.brotliCompressSync(raw),exported=packed.toString('base64');
  context.SAVE_STRING=exported;
@@ -339,7 +344,10 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
  assert.equal(element('save-dir').textContent,'%APPDATA%\\Games By Malcs\\Melvor Idle 2\\steam');// matches the Steam save folder
  assert.equal(save.version,31);assert.equal(save.character,'Tester');assert.equal(save.totalLevel,321);
  assert.equal(save.toolbelt.Woodcutting[ns+'WoodcuttingTool'].item,ns+'ReinforcedWoodcuttersAxe');
- assert.deepEqual(save.equipment,[ns+'GoldTopazAmulet',ns+'GoldTopazRing']);
+ assert.deepEqual(save.equipment,[ns+'GoldTopazAmulet',ns+'GoldTopazRing',ns+'StoneSword']);
+ assert.equal(save.combatWeapon,ns+'StoneSword');
+ assert.deepEqual(save.combatStances,{[ns+'Sword']:ns+'Slash'});
+ assert.equal(save.combatSpell,ns+'AirStrike');
  assert.deepEqual(save.pets.Woodcutting,[]);// locked pet
  assert.deepEqual(save.tasks.Woodcutting,[ns+'WoodcuttingTask1']);
  assert.deepEqual(save.tasks.Ranching,[ns+'RanchingTask201']);
@@ -353,6 +361,20 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
  const base=JSON.parse(run('JSON.stringify(savedRecipeStats(byKey.get("WoodcuttingRecipe/NormalTree"),null))'));
  assert.equal(base.xp,run('byKey.get("WoodcuttingRecipe/NormalTree").obj.BaseExperience'));
  run('playerSave=parseSave(decodeSaveString(SAVE_STRING));playerBoostsMemo=null');
+ assert.equal(run('savedCombatFields({...playerSave,combatStances:undefined})'),null);
+ run('combatSimulatorPage()');
+ const savedCombatHtml=element('detail').innerHTML;
+ assert.match(savedCombatHtml,/已按存档中的等级/);
+ assert.match(savedCombatHtml,/<option value="MelvorBase:Slash" selected>/);
+ for(const [field,value] of Object.entries({interval:2.7,accuracy:840,max:26,hp:100,'power-Normal':56,'evasion-Stab':640})){
+  assert.ok(savedCombatHtml.includes('name="'+field+'" value="'+value+'"'),field);
+ }
+ assert.equal(run('savedCombatFields({...playerSave,equipment:[],combatWeapon:null}).fields.interval'),4);
+ const wand=run('entries.find(e=>e.type==="Item"&&e.obj.Capabilities?.["MelvorBase:Weapon"]?.Type==="MelvorBase:Wand").obj.Id');
+ const magic=JSON.parse(run(`JSON.stringify(savedCombatFields({...playerSave,equipment:[${JSON.stringify(ns+wand)}],combatWeapon:${JSON.stringify(ns+wand)}}))`));
+ assert.equal(magic.fields.element,ns+'Air');
+ assert.ok(magic.fields.max>=25);
+ assert.equal(magic.missingSpell,false);
  if(referenceSnapshot){
   const hunt=withSave=>JSON.parse(run('JSON.stringify(huntingStats(byKey.get("HuntingAnimal/WildChicken"),'+(withSave?'playerSave':'null')+'))'));
   const baseHunt=hunt(false),savedHunt=hunt(true);

@@ -199,6 +199,70 @@ function enemyAreaPage(){
   groups.map(([id,title])=>'<section id="enemy-'+esc(id)+'"><h3>'+esc(title)+'</h3>'+(id==='Dungeons'?'<p class="muted">地下城中的击杀没有掉落，通关奖励见各地下城条目。</p>':'')+sections.get(id).join('')+'</section>').join('');
 }
 
+function combatBaseMaxHit(style,weightedLevel,stat){
+ const {Type,Data:d}=style.MaxHitFormula||{},l=weightedLevel(d?.Levels);
+ if(shortId(Type)==='StrengthBonus')return Math.floor(22+l+(l+17)*stat(d.StrengthBonusStat)/64);
+ if(shortId(Type)==='DamageBonus')return Math.floor(stat(d.MaxHitStat)*(1+stat(d.DamageBonusStat))*(1+(l+1)/200));
+ throw new Error('该战斗方式的基础伤害公式尚未支持。');
+}
+
+function combatBaseRating(level,bonus){return Math.floor((level+9)*(bonus+64));}
+
+function savedCombatFields(save){
+ if(!save?.combatStances||save.combatWeapon===undefined)return null;
+ const ns=G.Namespace+':',get=(type,id)=>byKey.get(type+'/'+shortId(id))?.obj;
+ const equipped=save.equipment.map(id=>get('Item',id)?.Capabilities);
+ const weapon=(save.combatWeapon?get('Item',save.combatWeapon):get('Item','DefaultWeapon'))?.Capabilities;
+ const gear=weapon?.[ns+'Weapon'],stances=get('WeaponType',gear?.Type)?.Stances;
+ const savedStance=save.combatStances[gear?.Type];
+ const stanceId=stances?.includes(savedStance)?savedStance:stances?.[0];
+ const stance=get('AttackStance',stanceId),style=get('CombatStyle',stance?.CombatStyle);
+ if(!style)return null;
+ const spell=style.UsesSpells?get('MagicSpell',save.combatSpell):null;
+ const element=(style.UsesSpells?spell?.Element:gear.Elements?.[0])||ns+'Neutral';
+ if(!save.combatWeapon)equipped.push(weapon);
+ const stats=[...equipped.map(item=>item?.[ns+'Equipment']?.Stats),spell?.Stats];
+ const sum=(field,key,id)=>stats.reduce((total,block)=>total+(block?.[field]||[]).reduce((n,row)=>n+(row[key]===id?row.Value:0),0),0);
+ const records=[...playerBoostsCache(save),...equippedSaveBoosts(save),
+  ...(stance.Bonuses?.Component||[]).filter(m=>!m.Condition&&!m.FromContext).map(m=>({m,times:1}))];
+ const modifiers=records.filter(({m})=>m.Stat?.StatsType===ns+'Character'&&m.LocalContext?.Component?.Entity===ns+'Combat'&&
+  m.LocalContext.Component.Component==='Player'&&!m.Scaling);
+ const bonus=(name,scope={})=>modifiers.reduce((total,{m,times})=>{
+  if(m.Stat.Name!==name)return total;
+  const context={CombatStyle:stance.CombatStyle,AttackStance:stanceId,Element:element,...scope};
+  return Object.entries(m.LocalContext).every(([k,v])=>k==='Component'||v==null||context[k]===v)?total+m.Value*times:total;
+ },0);
+ const level=id=>Math.trunc(saveLevel(shortId(id),save)+bonus('FlatCombatLevel',{CombatLevel:id}));
+ const weightedLevel=rows=>(rows||[]).reduce((total,r)=>total+level(r.Level)*r.Ratio,0);
+ const stat=id=>{
+  const scope={CombatStat:id},raw=(sum('Stats','Stat',id)+bonus('FlatCombatStatValue',scope))*(1+bonus('PercentCombatStatValue',scope));
+  const lower=Math.floor(raw);
+  return get('CombatStat',id)?.IsPercent?raw:raw-lower===.5&&lower%2===0?lower:Math.round(raw);
+ };
+ const max=Math.max(1,Math.floor(combatBaseMaxHit(style,weightedLevel,stat)*(1+bonus('PercentMaxHit'))+bonus('FlatMaxHit')));
+ const fields={
+  stance:stanceId,damageType:gear.DamageType,element,
+  interval:Math.max(250,Math.floor(stat(style.AttackIntervalStat)*(1+bonus('PercentAttackInterval'))+bonus('FlatAttackInterval')))/1000,
+  accuracy:Math.max(1,Math.floor(combatBaseRating(weightedLevel(style.AccuracyRatingLevels),stat(stance.AccuracyStat))*(1+bonus('PercentAccuracyRating')))),
+  min:Math.min(max,Math.max(1,Math.floor(1+bonus('FlatMinHit')+max*bonus('MinHitBasedOnMaxHit')))),max,
+  crit:Math.min(100,Math.max(0,bonus('FlatCriticalHitChance')*100)),critMultiplier:Math.max(1,1.5+bonus('FlatCriticalHitMultiplier')),
+  hp:Math.max(1,Math.floor(level(style.MaxHitpointsLevel)*10*(1+bonus('PercentMaxHitpoints'))+bonus('FlatMaxHitpoints'))),
+  ward:Math.max(0,stat(style.MaxWardStat)),armour:Math.max(0,stat(style.ArmourStat)),lifesteal:Math.min(100,Math.max(0,stat(style.LifestealStat)*100))
+ };
+ for(const s of G.Objects.AttackStance||[]){
+  const scope={CombatStyle:s.CombatStyle,AttackStance:ns+s.Id},defence=get('CombatStyle',s.CombatStyle);
+  const base=combatBaseRating(weightedLevel(defence.EvasionLevels),stat(s.EvasionStat));
+  fields['evasion-'+s.Id]=Math.max(1,Math.floor(base*(1+bonus('PercentEvasionRating',scope))+bonus('FlatEvasionRating',scope)));
+ }
+ for(const d of G.Objects.DamageType||[]){
+  const id=ns+d.Id,scope={DamageType:id};
+  fields['power-'+d.Id]=Math.max(1,Math.trunc((sum('PowerRatings','DamageType',id)+bonus('FlatPowerRating',scope))*(1+bonus('PercentPowerRating',scope))));
+  fields['protection-'+d.Id]=Math.max(0,Math.trunc((sum('ProtectionRatings','DamageType',id)+bonus('FlatProtectionRating',scope))*(1+bonus('PercentProtectionRating',scope))));
+ }
+ // shortcut: reconstruct stable stats only; extend the estimate when active effects can be tracked over a fight.
+ return {fields,missingSpell:style.UsesSpells&&!spell};
+}
+
 function compileCombatEnemy(entry,player){
  const enemy=entry.obj,limits=new Set();
  const {ticks,hitChance,resistance}=combatKernel;
@@ -239,13 +303,7 @@ function compileCombatEnemy(entry,player){
   const defendingStance=get('AttackStance',player.stance).obj;
   const defendingStyle=get('CombatStyle',defendingStance.CombatStyle)?.obj;
   if(!style||!defendingStyle)throw new Error('游戏数据中缺少战斗方式。');
-  const formula=style.MaxHitFormula;
-  const d=formula?.Data||{},l=weightedLevel(d.Levels);
-  let max;
-  if(shortId(formula?.Type)==='StrengthBonus')max=22+l+(l+17)*(stat.get(d.StrengthBonusStat)||0)/64;
-  else if(shortId(formula?.Type)==='DamageBonus')max=(stat.get(d.MaxHitStat)||0)*(1+(stat.get(d.DamageBonusStat)||0))*(1+(l+1)/200);
-  else throw new Error('这只怪物的基础伤害公式尚未支持。');
-  max=Math.max(1,Math.floor(max));
+  const max=Math.max(1,combatBaseMaxHit(style,weightedLevel,id=>stat.get(id)||0));
   const min=Math.min(max,Math.max(1,Math.floor(1+max*minHitFraction)));
   const triangle=(G.Objects.CombatTriangleBonus||[]).find(b=>b.PlayerStyle===playerStyle&&b.EnemyStyle===stance.CombatStyle);
   const elemental=(G.Objects.ElementalBonus||[]).find(b=>b.PlayerElement===playerElement&&b.EnemyElement===enemy.Element);
@@ -275,8 +333,8 @@ function compileCombatEnemy(entry,player){
    attackUntil+=weight/weights;
    return {hits,until:attackUntil,factor,avoidable:attack.IsAvoidable!==false};
   });
-  const evasion=Math.max(1,Math.floor((weightedLevel(defendingStyle.EvasionLevels)+9)*((stat.get(defendingStance.EvasionStat)||0)+64)));
-  const accuracy=Math.max(1,Math.floor((weightedLevel(style.AccuracyRatingLevels)+9)*((stat.get(stance.AccuracyStat)||0)+64)));
+  const evasion=Math.max(1,combatBaseRating(weightedLevel(defendingStyle.EvasionLevels),stat.get(defendingStance.EvasionStat)||0));
+  const accuracy=Math.max(1,combatBaseRating(weightedLevel(style.AccuracyRatingLevels),stat.get(stance.AccuracyStat)||0));
   stanceUntil+=s.Weight/stanceWeight;
   return {
    until:stanceUntil,hp:10*(levels.get(style.MaxHitpointsLevel)??1),
@@ -293,11 +351,15 @@ function compileCombatEnemy(entry,player){
 
 function combatSimulatorPage(){
  stopCombatSimulation();
+ const saveStats=savedCombatFields(playerSave),saved=saveStats?.fields;
+ const setupNames=['enemy','seconds','spawn','samples','seed'];
+ const previous=$('combat-sim-form')?.elements;
+ const setup=previous&&setupNames.map(name=>previous.namedItem(name).value);
  const choices=(type,selected)=>entries.filter(e=>e.type===type).map(e=>
   '<option value="'+esc(G.Namespace+':'+e.obj.Id)+'"'+(e.obj.Id===selected?' selected':'')+'>'+esc(e.title)+'</option>').join('');
  const field=(label,control)=>'<label><span>'+esc(label)+'</span>'+control+'</label>';
  const select=(label,name,options)=>field(label,'<select name="'+esc(name)+'">'+options+'</select>');
- const number=(label,name,value,min,max,step=1)=>field(label,'<input type="number" name="'+esc(name)+'" value="'+value+'" min="'+min+'" max="'+max+'" step="'+step+'" required>');
+ const number=(label,name,value,min,max,step=1)=>field(label,'<input type="number" name="'+esc(name)+'" value="'+esc(saved?.[name]??value)+'" min="'+min+'" max="'+max+'" step="'+step+'" required>');
  const card=(label,fields)=>'<fieldset class="calcform combat-stat-card"><legend>'+esc(label)+'</legend>'+fields+'</fieldset>';
  const enemy=entries.filter(e=>e.type==='Enemy').sort((a,b)=>a.title.localeCompare(b.title,'zh-CN')).map(e=>
   '<option value="'+esc(e.key)+'"'+(e.obj.Id==='Golbin'?' selected':'')+'>'+esc(e.title+(e.title!==e.en?' · '+e.en:''))+'</option>').join('');
@@ -308,9 +370,11 @@ function combatSimulatorPage(){
   '<form id="combat-sim-form"><section><h3>怪物与模拟时长</h3><div class="combat-setup">'+select('怪物','enemy',enemy)+
   number('模拟时长（秒）','seconds',60,.1,604800,'any')+number('出现与重生间隔（秒）','spawn',3,.25,60,'any')+
   number('模拟次数','samples',1024,32,16384)+number('随机种子','seed',1,0,4294967295)+'</div></section>'+
-  '<section><h3>战斗属性</h3><p>输入尚未计入目标克制的面板值。模拟会按所选怪物计算战斗三角和元素克制。</p><div class="combat-stat-grid">'+
-  card('进攻属性',select('攻击姿态','stance',choices('AttackStance','Stab'))+select('伤害类型','damageType',choices('DamageType','Normal'))+
-  select('元素','element',choices('Element','Neutral'))+number('攻击间隔（秒）','interval',2.4,.25,60,'any')+
+  '<section><h3>战斗属性</h3><p>'+(saved?'已按存档中的等级、当前装备、姿态、法术和可确认的长期加成估算。可手动调整。祈祷、套装和临时效果未计入。'+
+  (saveStats.missingSpell?' 存档未记录当前攻击法术，请核对元素和伤害。':''):playerSave?'请重新导入存档以自动填入战斗属性。':'可在顶栏导入存档，自动填入战斗属性。')+
+  ' 模拟会按所选怪物计算战斗三角和元素克制。</p><div class="combat-stat-grid">'+
+  card('进攻属性',select('攻击姿态','stance',choices('AttackStance',shortId(saved?.stance)||'Stab'))+select('伤害类型','damageType',choices('DamageType',shortId(saved?.damageType)||'Normal'))+
+  select('元素','element',choices('Element',shortId(saved?.element)||'Neutral'))+number('攻击间隔（秒）','interval',2.4,.25,60,'any')+
   number('精准值','accuracy',750,1,1000000)+number('最低伤害','min',1,1,1000000)+number('最高伤害','max',30,1,1000000)+
   number('暴击几率（%）','crit',0,0,100,'any')+number('暴击倍率','critMultiplier',1.5,1,10,'any'))+
   card('躲避值',stances)+'<div class="combat-stat-side">'+card('战力与防护',ratings)+
@@ -318,6 +382,7 @@ function combatSimulatorPage(){
   number('护甲','armour',0,0,1000000)+number('生命偷取（%）','lifesteal',0,0,100,'any'))+'</div></div></section>'+
   '<p><button type="submit" id="combat-sim-start">开始模拟</button> <button type="button" id="combat-sim-cancel" disabled>取消模拟</button></p></form>'+
   '<p id="combat-sim-status" role="status"></p><div id="combat-sim-result"></div>';
+ if(setup)setupNames.forEach((name,i)=>{$('combat-sim-form').elements.namedItem(name).value=setup[i];});
 }
 
 function combatNumber(raw,min,max,integer,label){
