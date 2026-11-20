@@ -309,7 +309,7 @@ function skillSections(list,skillOf,renderPart,{tag='h3',other='其他'}={}){
 function recipeSection(skill,recipes){
  const head='<h3>配方与等级解锁</h3>';
  if(!playerSave)return head+'<p class="muted">基础周期：伐木按生命值次命中、工匠按步骤计时；钓鱼使用平均间隔。未计加成、失败、额外等待与银行满等中断。基础 XP/h 是该假设下的参考值。'+recipeValueNote+' 在页面顶部导入存档后，本表按你的加成重新计算。</p>'+dataTable(recipeHeaders,recipeRows(recipes),'recipes');
- const headers=skill==='Thieving'?[...savedRecipeHeaders.slice(0,2),'单次成功率（存档）',...savedRecipeHeaders.slice(2)]:savedRecipeHeaders;
+ const headers=['Thieving','Cooking'].includes(skill)?[...savedRecipeHeaders.slice(0,2),'单次成功率（存档）',...savedRecipeHeaders.slice(2)]:savedRecipeHeaders;
  return head+savedBoostSummary(skill,recipes)+dataTable(headers,recipeRows(recipes,playerSave),'recipes');
 }
 function savedBoostSummary(skill,recipes){
@@ -322,13 +322,14 @@ function savedBoostSummary(skill,recipes){
  const caption='<p><b>'+(recipes.length?'已按存档“'+esc(playerSave.character)+'”计算':'存档“'+esc(playerSave.character)+'”')+'</b>（'+esc(skillName(skill))+' 等级 '+fmt(saveLevel(skill,playerSave),0)+'）。';
  if(!recipes.length)return '<div class="note save-note">'+caption+'已识别的长期加成（'+other.length+' 项）。各表注明计算范围。</p>'+list(other)+'</div>';
  const notes=skill==='Thieving'?'周期按连续扒窃直到一次成功计算，包含失败及眩晕等待。收益按每次成功计，完成战利品按所需步骤摊入，经验按目标完成计。未计同区额外扒窃、劫案条件奖励、死亡和其他中断。':
-  '单次产物期望价值按出售价格估算，每小时价值按存档周期折算。';
+  ({Mining:'周期和收益按每次敲击计，经验按破岩计。期望破岩耗时包含勘探进度。',Cooking:'经验和收益按每次尝试估算，计入成功率。',Fishing:'按普通渔获、杂物和特殊掉落估算，未计当前优先目标和鱼饵。'}[skill]||
+  '单次产物期望价值按出售价格估算，每小时价值按存档周期折算。');
  return '<div class="note save-note">'+caption+notes+'药水、装备套装、临时效果和材料成本未计入。</p><p><b>本表使用的加成（'+used.size+'）</b></p>'+
   (used.size?list([...used.values()]):'<p class="muted">存档中没有影响本表的长期加成。</p>')+
   (other.length?'<details><summary>已识别、未计入本表的加成（'+other.length+'）</summary>'+list(other)+'</details>':'')+'</div>';
 }
 const saveProgressOptions={
- MasteryGuildTask:{label:'隐藏已完成的任务',note:'仅隐藏可从存档确认完成的任务。',empty:'当前筛选下没有剩余精通任务。',done:save=>{
+ MasteryGuildTask:{label:'隐藏已完成的任务',note:'仅隐藏可从存档确认完成的任务。已有存档可重新导入以读取统计进度。',empty:'当前筛选下没有剩余精通任务。',done:save=>{
   const tasks=new Set(Object.values(save.tasks||{}).flat());return e=>savedMasteryTaskComplete(e,save,tasks);
  }},
  ShopPurchase:{label:'隐藏已购买的一次性条目',empty:'当前筛选下没有剩余商店条目。',done:save=>e=>e.obj.DefaultBuyLimit===1&&save.shop?.[G.Namespace+':'+e.obj.Id]>0}

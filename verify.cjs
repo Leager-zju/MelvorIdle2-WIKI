@@ -354,18 +354,26 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
  i32(31);w.push(Buffer.alloc(16));str('Tester');str('Standard');i64(0);for(let k=0;k<4;k++)str('');i32(321);i64(0);i64(0);u8(0);
  const entity=(id,components)=>{str(ns+id);region(()=>{i32(components.length);for(const [cid,fill] of components){str(cid);region(fill);}});};
  const task=(id,goal,complete,trigger)=>{str(ns+id);region(()=>{u8(goal!==null?1:0);if(goal!==null){str(goal);region(()=>{f64(complete?200:0);u8(+complete);});}u8(+trigger);});};
- i32(8);
+ i32(9);
  entity('Woodcutting',[
   ['Experience',()=>f64(13034431)],// level 99
   ['Toolbelt',()=>{i32(1);str(ns+'WoodcuttingTool');region(()=>{i32(1);u8(1);str(ns+'ReinforcedWoodcuttersAxe');});}],
   ['Pets',()=>{i32(1);str(ns+'Woody');region(()=>{u8(0);u8(0);});}],
   ['MasteryGuild',()=>{u8(0);i32(3);task('WoodcuttingTask1','0',true,true);task('WoodcuttingTask2','1',false,true);task('WoodcuttingTask43',null,false,true);}],
+  ['Statistics',()=>{i32(0);i32(1);str(ns+'WoodcuttingItemGained');region(()=>{i32(1);f64(2);str(ns+'BirdNest');});i32(0);}],
   ['Unknown',()=>{i32(7);str('skipped by size');}]
+ ]);
+ entity('Agility',[
+  ['Action',()=>{u8(0);u8(0);u8(0);i32(1);str(ns+'Climb1');region(()=>{
+   i32(1);str(ns+'Climb1SimplePath');region(()=>{u8(0);u8(0);i32(1);str(ns+'Climb1SimpleObstacle1');region(()=>u8(1));i64(0);});u8(0);
+  });u8(0);i32(0);i32(0);i32(0);}],
+  ['Techniques',()=>{i32(1);str(ns+'Climbing');region(()=>f64(1000));}],
+  ['Statistics',()=>{i32(0);i32(0);i32(0);i32(1);str(ns+'AgilityCourseCompleted');region(()=>{i32(1);f64(30);str(ns+'Arena1');});}]
  ]);
  entity('Ranching',[['MasteryGuild',()=>{u8(0);i32(2);task('RanchingTask201',null,false,true);task('RanchingTask202',null,false,false);}]]);
  entity('Shop',[['Shop',()=>{u8(1);u8(0);u8(1);i32(0);i32(0);i32(5);for(const [id,n] of [['WoodenAxeHandle',1],['OakAxeHandle',1],['Cheese',5],['BananaTreeSeed',50],['OakTrackingStick',1]]){i32(n);str(ns+id);}}]]);
  entity('Hunting',[
-  ['Journal',()=>{i32(1);str(ns+'WildChicken');region(()=>{u8(1);f64(30);u8(0);f64(0);f64(0);});i32(0);i32(0);}],
+  ['Journal',()=>{i32(1);str(ns+'WildChicken');region(()=>{u8(1);f64(30);u8(0);f64(0);f64(0);});i32(1);i32(0);}],
   ['Action',()=>{u8(0);u8(0);i32(0);i32(240);i32(0);i32(1);str(ns+'WildChicken');region(()=>{
    i32(0);i32(0);i32(0);u8(1);str(ns+'ReinforcedSnare');u8(0);u8(0);i32(0);u8(1);i32(0);u8(0);i32(0);u8(0);
   });u8(1);u8(0);u8(0);u8(0);u8(1);}]
@@ -400,7 +408,7 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
  assert.deepEqual(save.tasks.Woodcutting,[ns+'WoodcuttingTask1']);
  assert.deepEqual(save.tasks.Ranching,[ns+'RanchingTask201']);
  assert.equal(save.shop[ns+'WoodenAxeHandle'],1);assert.deepEqual(save.astrology[ns+'Deedree'],[ns+'DeedreeA1']);
- assert.deepEqual(save.hunting,{journal:{[ns+'WildChicken']:30},animals:{[ns+'WildChicken']:{trap:ns+'ReinforcedSnare',bait:true,trapless:false}}});
+ assert.deepEqual(save.hunting,{journal:{[ns+'WildChicken']:30},animals:{[ns+'WildChicken']:{trap:ns+'ReinforcedSnare',bait:true,trapless:false}},rareSpecies:1,collectables:0});
  assert.equal(run('saveLevel("Woodcutting",'+JSON.stringify(save)+')'),99);
  for(const bad of ['','not base64!','QUJD'])assert.throws(()=>run('decodeSaveString('+JSON.stringify(bad)+')'),bad);
  assert.throws(()=>run('parseSave(new Uint8Array([31,0,0,0]))'),/不完整|无法识别/);
@@ -409,6 +417,41 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
  const base=JSON.parse(run('JSON.stringify(savedRecipeStats(byKey.get("WoodcuttingRecipe/NormalTree"),null))'));
  assert.equal(base.xp,run('byKey.get("WoodcuttingRecipe/NormalTree").obj.BaseExperience'));
  run('playerSave=parseSave(decodeSaveString(SAVE_STRING));playerBoostsMemo=null');
+ assert.deepEqual(save.masteryStatistics,{
+  [ns+'WoodcuttingItemGained']:{[ns+'BirdNest']:2},[ns+'AgilityCourseCompleted']:{[ns+'Arena1']:30}
+ });
+ assert.equal(run(`entries.filter(e=>recipeSkill(e)&&/Recipe$/.test(e.type)&&recipeTime(e)&&Number.isFinite(e.obj.BaseExperience)).every(e=>{
+  const s=savedRecipeStats(e,playerSave);return Number.isFinite(s.xp)&&Number.isFinite(s.ms)&&Number.isFinite(s.value);
+ })`),true);
+ assert.deepEqual(save.agilityTechniques,{[ns+'Climbing']:1000});
+ assert.equal(save.agilityShortcuts,1);
+ for(const id of ['WoodcuttingTask43','AgilityTask7','AgilityTask37','AgilityTask53','HuntingTask13'])
+  assert.equal(run(`savedMasteryTaskComplete(byKey.get('MasteryGuildTask/${id}'),playerSave,new Set())`),true,id);
+ assert.equal(run(`savedMasteryTaskComplete(byKey.get('MasteryGuildTask/AgilityTask32'),playerSave,new Set())`),false);
+ assert.equal(run(`savedMasteryTaskComplete(byKey.get('MasteryGuildTask/WoodcuttingTask43'),{...playerSave,masteryStatistics:undefined},new Set())`),false);
+ if(referenceSnapshot){
+  const modeled=(key,model)=>JSON.parse(run(`JSON.stringify(savedModeledRecipeStats(byKey.get(${JSON.stringify(key)}),playerSave,
+   {model:${JSON.stringify(model)},flat:{},percent:{},doubling:0,quantity:0},6))`));
+  const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-9,`${a} ≈ ${b}`);
+  assert.equal(modeled('ArtisanRecipe/StoneSword',{SkipStepChance:.5}).ms,3000);
+  const cooking=modeled('CookingRecipe/Shrimp',{FlatProficiency:10});
+  near(cooking.successChance,.8);
+  near(cooking.value,6.4);
+  const tree=modeled('WoodcuttingRecipe/NormalTree',{DoubleDamageChance:1,'FlatOnHitItemChance#MelvorBase:BirdNest':.1});
+  assert.equal(tree.ms,2000);
+  near(tree.value,3+2*.1025*28);
+  const mine=modeled('MiningRecipe/Stone',{ShatterChance:.5});
+  near(mine.xpMs,1500*(1+.6+.36));
+  near(mine.xp,9);
+  near(modeled('FishingRecipe/ShallowPools',{SecondSpecialItemChance:1}).value,5+.01*1.01);
+  const specialOrder=run(`(()=>{
+   const e=byKey.get('FishingRecipe/ShallowPools');
+   const SpecialProducts=[{Item:'MelvorBase:BaitBox',Quantity:1,Chance:.5},{Item:'MelvorBase:BirdNest',Quantity:1,Chance:.25}];
+   return savedModeledRecipeStats({...e,obj:{...e.obj,SpecialProducts}},playerSave,{model:{},flat:{},percent:{},doubling:0},8).value;
+  })()`);
+  near(specialOrder,5+.25*28+.75*.5);
+  near(modeled('FiremakingRecipe/NormalLog',{'FlatProductChance#MelvorBase:Ash':.25}).value,3.6);
+ }
  assert.equal(run('savedCombatFields({...playerSave,combatStances:undefined})'),null);
  run('combatSimulatorPage()');
  const savedCombatHtml=element('detail').innerHTML;
@@ -486,7 +529,7 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
   run('showSkill("Thieving")');assert.match(element('detail').innerHTML,/单次成功率（存档）/);
   assert.match(element('detail').innerHTML,/\+15%扒窃的稀有战利品掉落几率/);assertPlayerPage();
   run('playerSave={...fixtureSave,toolbelt:{...fixtureSave.toolbelt,Woodcutting:{Gloves:{item:"MelvorBase:WoodcuttersGloves",qty:1}}}};showSkill("Woodcutting")');
-  assert.match(element('detail').innerHTML,/已识别、未计入本表的加成[^]*?Item%2FWoodcuttersGloves/);assertPlayerPage();
+  assert.match(element('detail').innerHTML,/本表使用的加成[^]*?双倍伤害[^]*?Item%2FWoodcuttersGloves/);assertPlayerPage();
   run('playerSave=fixtureSave');
  }
  // Interval formulas follow each skill's game code: flat before percent (fishing), after percent (artisan).
@@ -505,7 +548,8 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
  assert.ok(hasRow(element('detail').innerHTML,'MasteryGuildTask/WoodcuttingTask1'));
  const tasks=setHide(true);
  assert.ok(!hasRow(tasks,'MasteryGuildTask/WoodcuttingTask1'));
- for(const id of ['WoodcuttingTask2','WoodcuttingTask43'])assert.ok(hasRow(tasks,'MasteryGuildTask/'+id),id);
+ assert.ok(!hasRow(tasks,'MasteryGuildTask/WoodcuttingTask43'));
+ assert.ok(hasRow(tasks,'MasteryGuildTask/WoodcuttingTask2'));
  run('showSkill("Ranching")');
  assert.ok(!hasRow(element('detail').innerHTML,'MasteryGuildTask/RanchingTask201'));
  assert.ok(hasRow(element('detail').innerHTML,'MasteryGuildTask/RanchingTask202'));

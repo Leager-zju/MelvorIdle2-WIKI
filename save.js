@@ -49,7 +49,7 @@ function parseSave(bytes){
  if(version<SAVE_MIN_VERSION)throw new Error('存档版本 '+version+' 过旧，请在当前版本游戏中重新导出。');
  r.skip(16);const character=r.str();r.str();r.i64();for(let i=0;i<4;i++)r.str();
  const totalLevel=r.i32();r.i64();r.i64();r.bool();
- const save={version,character,totalLevel,xp:{},toolbelt:{},equipment:[],pets:{},tasks:{},shop:{},astrology:{},hunting:{journal:{},animals:{}}};
+ const save={version,character,totalLevel,xp:{},toolbelt:{},equipment:[],pets:{},tasks:{},shop:{},astrology:{},agilityTechniques:{},masteryStatistics:{},hunting:{journal:{},animals:{}}};
  const entities=r.count();
  for(let i=0;i<entities;i++){
   const entity=shortId(r.str());
@@ -98,13 +98,70 @@ function readSaveComponent(r,save,entity,component,end){
    if(goal&&!goal.ConditionGoal&&complete&&(!goal.TriggerGoal||triggerMet))done.push(task);
   });}
   save.tasks[entity]=done;
+ }else if(entity==='Agility'&&component==='Action'&&save.version<=31){
+  save.agilityShortcuts=readAgilityShortcuts(r);
+ }else if(entity==='Agility'&&component==='Techniques'&&save.version<=31){
+  for(let n=r.count();n>0;n--){const id=r.str();r.region(techniqueEnd=>{if(techniqueEnd-r.pos===8)save.agilityTechniques[id]=r.f64();});}
+ }else if(component==='Statistics'&&save.version<=31){
+  readMasteryStatistics(r,save,entity,end);
  }else if(entity==='Shop'&&component==='Shop'){
   r.bool();r.bool();r.bool();r.i32();r.i32();
   for(let n=r.count();n>0;n--){const amount=r.i32();save.shop[r.str()]=amount;}
  }else if(entity==='Astrology'&&component==='Action')readSaveAstrology(r,save);
  else if(entity==='Hunting'&&component==='Journal'){
   for(let n=r.count();n>0;n--){const id=r.str();r.region(()=>{r.bool();save.hunting.journal[id]=r.f64();});}
+  if(end-r.pos>=8){save.hunting.rareSpecies=r.count();save.hunting.collectables=r.count();}
  }else if(entity==='Hunting'&&component==='Action')readSaveHunting(r,save.hunting.animals);
+}
+
+// StatisticsComponent writes value, item and currency groups before each skill's specialized groups.
+const masteryStatisticKeys=new Map(Object.entries({
+ ValueStatistic:'',ItemStatistic:'Item',AgilityCourseStatistic:'Course',AstrologyEventStatistic:'Event',
+ RanchingAnimalStatistic:'Animal',SlayerMasterStatistic:'Master',HuntingAnimalSpecies:'Species'
+}));
+const masteryStatisticIds=new Set((G.Objects.MasteryGuildTask||[]).map(task=>task.ConditionGoal?.Data?.Statistic).filter(Boolean));
+const statisticExtraGroups={Agility:1,Astrology:2,Hunting:2,Ranching:1,Slayer:1};
+function readMasteryStatistics(r,save,entity,end){
+ for(let group=0;group<3+(statisticExtraGroups[entity]||0)&&r.pos<end;group++){
+  for(let n=r.count();n>0;n--){
+   const id=r.str();
+   r.region(statEnd=>{
+    if(!masteryStatisticIds.has(id))return;
+    if(!group){
+     if(statEnd-r.pos===8)save.masteryStatistics[id]=r.f64();
+     return;
+    }
+    const entries=[];
+    for(let i=r.count();i>0;i--){const value=r.f64();entries.push([r.str(),value]);}
+    if(r.pos===statEnd)save.masteryStatistics[id]=Object.fromEntries(entries);
+   });
+  }
+ }
+}
+
+function readAgilityShortcuts(r){
+ r.bool();
+ if(r.bool())r.str();
+ if(r.bool()){r.str();if(r.bool())r.str();}
+ let built=0;
+ for(let n=r.count();n>0;n--){
+  const course=byKey.get('AgilityCourse/'+shortId(r.str()))?.obj;
+  r.region(()=>{
+   if(!course)return;
+   for(let m=r.count();m>0;m--){
+    const id=r.str(),path=course.Paths.includes(id)&&byKey.get('AgilityCoursePath/'+shortId(id))?.obj;
+    r.region(()=>{
+     if(!path)return;
+     r.bool();if(r.bool())r.str();
+     for(let k=r.count();k>0;k--){
+      const obstacle=r.str();
+      r.region(()=>{if(path.Obstacles.includes(obstacle)&&r.bool())built++;});
+     }
+    });
+   }
+  });
+ }
+ return built;
 }
 
 function readSaveHunting(r,animals){
@@ -132,7 +189,12 @@ function savedMasteryTaskComplete(entry,save,done){
  const condition=o.ConditionGoal,data=condition?.Data;
  if(!data||o.Goal||o.TriggerGoal)return false;
  const skill=shortId(data.Component?.Entity);
- switch(shortId(condition.Type)){
+ const type=shortId(condition.Type);
+ if(masteryStatisticKeys.has(type)){
+  const key=masteryStatisticKeys.get(type),stat=save.masteryStatistics?.[data.Statistic];
+  return (key?stat?.[data[key]]:stat)>=data.Value;
+ }
+ switch(type){
   case 'Level':return Number.isFinite(save.xp[skill])&&saveLevel(skill,save)>=data.Level;
   case 'PetUnlocked':return (save.pets[skill]||[]).includes(data.Pet);
   case 'AstrologyMajorNodeUnlockCount':
@@ -142,6 +204,19 @@ function savedMasteryTaskComplete(entry,save,done){
    const group=shortId(condition.Type)==='AstrologyMajorNodeUnlockCount'?'MajorNodes':'MinorNodes';
    return (constellation?.[group]||[]).filter(node=>nodes.includes(node)).length>=data.Count;
   }
+  case 'AgilityShortcutsCreated':return save.agilityShortcuts>=data.Count;
+  case 'AgilityTechniqueLevel':
+  case 'AgilityNumTechniquesLevel':{
+   const level=data.Level,root=2**(1/3.25);
+   const xp=Math.floor((level*(level-1)+600*(2**(level/3.25)-root)/(root-1))/6);
+   const qualified=Object.entries(save.agilityTechniques||{}).filter(([id,value])=>
+    value>=xp&&byKey.get('AgilityTechnique/'+shortId(id))?.obj.LevelCap>=level);
+   return type==='AgilityTechniqueLevel'?qualified.some(([id])=>id===data.Technique):qualified.length>=data.NumTechniques;
+  }
+  case 'HuntingUniqueRareSpeciesFound':return save.hunting?.rareSpecies>=data.Count;
+  case 'HuntingUniqueCollectablesFound':return save.hunting?.collectables>=data.Count;
+  case 'HuntingMaxLevelAnimals':return Object.entries(save.hunting?.journal||{}).filter(([id,xp])=>
+   byKey.get('HuntingAnimal/'+shortId(id))?.obj.LogToJournal&&huntingJournalLevel(xp)>=data.Level).length>=data.Count;
   default:return false;
  }
 }
@@ -186,7 +261,7 @@ function playerBoosts(save){
 
 // Does a bonus apply to this recipe? Every non-null local-context field must match the recipe.
 function boostAppliesTo(m,skill,e){
- if(m.StatGroup)return m.StatGroup==='GlobalPercentActionInterval'||m.StatGroup==='GlobalFlatActionInterval';
+ if(m.StatGroup)return ['GlobalPercentActionInterval','GlobalFlatActionInterval'].includes(m.StatGroup);
  const ctx=m.LocalContext||{},o=e.obj,id=G.Namespace+':'+o.Id;
  if(shortId(ctx.Component?.Entity)!==skill)return false;
  for(const [k,v] of Object.entries(ctx)){
@@ -196,7 +271,9 @@ function boostAppliesTo(m,skill,e){
   else if(k==='Subcategory'){if(v!==o.Subcategory)return false;}
   else if(k==='Location'){if(v!==o.Location)return false;}
   else if(k==='RecipeType'){if(e.type!=='ThievingRecipe'||v!==o.RecipeType)return false;}
-  else return false;// item / currency / effect specific bonuses are not part of the base recipe numbers
+  else if(k==='Item'){if(!recipeModelStats[e.type]?.includes(m.Stat?.Name)||!o[scopedRecipeItems[m.Stat.Name]]?.some(row=>row.Item===v&&row.Quantity>0))return false;}
+  else if(k==='Currency'){if(e.type!=='FiremakingRecipe'||!/CurrencyReward$/.test(m.Stat?.Name)||v!==o.CurrencyReward?.Currency)return false;}
+  else return false;
  }
  return true;
 }
@@ -208,8 +285,32 @@ const flatIntervalStats={FlatInterval:'all',GlobalFlatActionInterval:'all',FlatM
 const thievingStatsKeys=['FlatStealth','PercentStealth','FlatPerception','PercentPerception','FlatFortune','FlatFortuneUnderSuccess',
  'PercentCommonLootChance','PercentRareLootChance','PercentCurrencyLootChance','PercentCurrencyReward','FlatCurrencyReward',
  'StunAvoidanceChance','PercentStunInterval','FlatStunInterval','FlatStages','SkipStageChance'];
+const recipeModelStats={
+ ArtisanRecipe:['FlatSteps','SkipStepChance','FlatProductQuantity','PercentProductQuantity'],
+ CookingRecipe:['FlatProficiency','FlatDifficulty','FlatProductQuantity','PercentProductQuantity'],
+ WoodcuttingRecipe:['FlatMaxHealth','PercentMaxHealth','DoubleDamageChance','InstantCutChance','WeakSpotChance',
+  'FlatOnHitItemChance','PercentOnHitItemChance','FlatOnHitItemQuantity','FlatOnCutItemChance','PercentOnCutItemChance'],
+ MiningRecipe:['PercentIncreaseRockBreakChance','FlatMinimumProspecting','FlatOnHitItemChance','PercentOnHitItemChance',
+  'BarItemChance','StoneItemChance','EssenceItemChance','AdditionalProductQuantityChance','ShatterChance'],
+ FishingRecipe:['FlatFishChance','IncreasedFishChance','JunkRerollChance','JunkToGP','FlatSpecialProductQuantity',
+  'FlatSpecialProductChance','IncreasedSpecialProductChance','SecondSpecialItemChance'],
+ FiremakingRecipe:['FlatProductChance','IncreasedProductChance','FlatProductQuantity','FlatCurrencyReward','PercentCurrencyReward']
+};
+const scopedRecipeItems={
+ FlatOnHitItemChance:'RandomProductsPerHit',PercentOnHitItemChance:'RandomProductsPerHit',FlatOnHitItemQuantity:'RandomProductsPerHit',
+ FlatOnCutItemChance:'RandomProductsPerCut',PercentOnCutItemChance:'RandomProductsPerCut',
+ FlatSpecialProductQuantity:'SpecialProducts',FlatSpecialProductChance:'SpecialProducts',IncreasedSpecialProductChance:'SpecialProducts',
+ FlatProductChance:'Products',IncreasedProductChance:'Products',FlatProductQuantity:'Products',PercentProductQuantity:'Products'
+};
+const probability=p=>Math.min(1,Math.max(0,p));
+function expectedSteps(steps,outcomes){
+ const remaining=[0];
+ for(let i=1;i<=steps;i++)remaining.push(1+outcomes.reduce((sum,[advance,chance])=>sum+chance*remaining[Math.max(0,i-advance)],0));
+ return remaining[steps];
+}
 function boostTotals(save,skill,e){
  const t={xp:0,percent:{},flat:{},doubling:0,quantity:0,percentQuantity:0,applied:[]};
+ if(recipeModelStats[e.type])t.model={};
  if(e.type==='ThievingRecipe')t.thieving=Object.fromEntries(thievingStatsKeys.map(key=>[key,0]));
  for(const r of playerBoostsCache(save)){
   if(!boostAppliesTo(r.m,skill,e))continue;
@@ -222,6 +323,10 @@ function boostTotals(save,skill,e){
   else if(intervalStats[stat])t.percent[intervalStats[stat]]=(t.percent[intervalStats[stat]]||0)+v;
   else if(flatIntervalStats[stat])t.flat[flatIntervalStats[stat]]=(t.flat[flatIntervalStats[stat]]||0)+v;
   else if(stat==='DoublingChance')t.doubling+=v;
+  else if(t.model&&recipeModelStats[e.type].includes(stat)){
+   const item=r.m.LocalContext?.Item,key=item?stat+'#'+item:stat;
+   t.model[key]=(t.model[key]||0)+v;
+  }
   else if(stat==='FlatProductQuantity')t.quantity+=v;
   else if(stat==='PercentProductQuantity')t.percentQuantity+=v;
   else if(t.thieving&&type==='ThievingAction'&&thievingStatsKeys.includes(stat))t.thieving[stat]+=v;
@@ -274,7 +379,6 @@ function savedRecipeTime(e,t){
 function savedThievingStats(e,save,t,xp){
  const o=e.obj,bonus=t.thieving,level=saveLevel('Thieving',save);
  const scale=(base,flat=0,percent=0)=>Math.max(0,Math.floor((base+flat)*(1+percent)));
- const probability=p=>Math.min(1,Math.max(0,p));
  const stealth=scale(level,bonus.FlatStealth,bonus.PercentStealth),perception=scale(o.Perception,bonus.FlatPerception,bonus.PercentPerception);
  const successChance=probability((100+stealth)/(100+perception));
  const interval=scaledInterval(e,o.BaseInterval,t.percent.all,t.flat.all);
@@ -283,8 +387,7 @@ function savedThievingStats(e,save,t,xp){
  const timerMs=ms=>ms===0?0:combatKernel.ticks(ms)*1000/60;
  const ms=(timerMs(interval)+(1-successChance)*(1-probability(bonus.StunAvoidanceChance))*timerMs(stunMs))/successChance;
  const skip=probability(bonus.SkipStageChance),stages=Math.max(1,o.Stages+Math.trunc(bonus.FlatStages));
- let previous=0,rolls=1;
- for(let stage=2;stage<=stages;stage++)[previous,rolls]=[rolls,1+(1-skip)*rolls+skip*previous];
+ const rolls=expectedSteps(stages,[[1,1-skip],[2,skip]]);
  const fortune=bonus.FlatFortune+(successChance<1?bonus.FlatFortuneUnderSuccess:0);
  const double=1+probability(t.doubling);
  const itemValue=(rows,chance)=>{
@@ -305,12 +408,77 @@ function savedThievingStats(e,save,t,xp){
  return {xp,ms,xpMs:ms*rolls,value:gold+loot,successChance,applied:t.applied};
 }
 
+// Per-action values use the game's actual reward rolls and quantity rounding.
+function savedModeledRecipeStats(e,save,t,xp){
+ const o=e.obj,b=(stat,item='')=>(t.model[stat]||0)+(item?t.model[stat+'#'+item]||0:0);
+ const sale=id=>{const price=itemEntry(id)?.obj.SellsFor;return shortId(price?.Currency)==='GoldPieces'?price.Quantity:0;};
+ const double=1+probability(t.doubling),cash=c=>shortId(c?.Currency)==='GoldPieces'?c.Quantity:0;
+ const value=(rows,chance,quantity)=> (rows||[]).reduce((sum,r)=>sum+chance(r)*Math.max(0,quantity(r))*sale(r.Item),0);
+ const hitDrops=(rows,cut=false)=>value(rows,r=>probability((r.Chance+b(cut?'FlatOnCutItemChance':'FlatOnHitItemChance',r.Item))*
+  (1+b(cut?'PercentOnCutItemChance':'PercentOnHitItemChance',r.Item))),
+ r=>r.Quantity+(cut?0:Math.trunc(b('FlatOnHitItemQuantity',r.Item))));
+ const interval=savedRecipeTime(e,t);
+ if(e.type==='WoodcuttingRecipe'){
+  const health=Math.max(1,Math.ceil((o.BaseMaxHealth+b('FlatMaxHealth'))*(1+b('PercentMaxHealth'))));
+  const instant=probability(b('InstantCutChance')),weak=probability(b('WeakSpotChance')),dbl=probability(b('DoubleDamageChance'));
+  const weakDamage=3+Math.trunc(.1*health);
+  const hits=expectedSteps(health,[[health,instant],[1,(1-instant)*(1-weak)*(1-dbl)],
+   [2,(1-instant)*(1-weak)*dbl],[weakDamage,(1-instant)*weak*(1-dbl)],[weakDamage*2,(1-instant)*weak*dbl]]);
+  const rewards=(Math.max(0,(o.Product?.Quantity||0)+Math.trunc(t.quantity))*sale(o.Product?.Item)+
+   hits*hitDrops(o.RandomProductsPerHit)+hitDrops(o.RandomProductsPerCut,true))*double;
+  return {xp,ms:interval/o.BaseMaxHealth*hits,value:rewards};
+ }
+ if(e.type==='MiningRecipe'){
+  const chance=probability(o.BaseProductChance*(1+b('PercentIncreaseRockBreakChance')));
+  const guaranteedAfter=chance>0?Math.max(1,Math.ceil((.9999-probability(b('FlatMinimumProspecting')))/chance)):Infinity;
+  const hits=chance>0?(1-(1-chance)**guaranteedAfter)/chance:Infinity;
+  const shatter=probability(b('ShatterChance'));
+  const product=(Math.max(0,(o.Product?.Quantity||0)+Math.trunc(t.quantity))+probability(b('AdditionalProductQuantityChance')))*
+   sale(o.Product?.Item)*(1+2*shatter);
+  const extra=(stat,items)=>probability(b(stat))*items.reduce((sum,r)=>sum+sale(r.Id),0);
+  const bonus=hitDrops(o.RandomProductsPerHit)+extra('StoneItemChance',skillConfig('Mining').StoneItems||[])+
+   extra('EssenceItemChance',skillConfig('Mining').EssenceItems||[]);
+  return {xp:xp*(1+shatter),xpMs:interval*hits,ms:interval,value:(bonus+(product+probability(b('BarItemChance'))*sale(o.BarItem))/hits)*double};
+ }
+ if(e.type==='FishingRecipe'){
+  const chance=probability((o.FishChance+b('FlatFishChance'))*(1+b('IncreasedFishChance')));
+  const fish=chance+(1-chance)*probability(b('JunkRerollChance'));
+  const weight=(o.RandomProducts||[]).reduce((n,r)=>n+r.Weight,0);
+  const regular=weight?value(o.RandomProducts,r=>fish*r.Weight/weight,r=>(r.MinQuantity+r.MaxQuantity)/2):0;
+  const junkSale=sale(o.JunkItem),junkBonus=b('JunkToGP'),doubled=double-1;
+  const junk=(1-fish)*(junkBonus>0?((1-doubled)*Math.trunc(junkSale*junkBonus)+doubled*Math.trunc(2*junkSale*junkBonus)):junkSale*double);
+  const specials=(o.SpecialProducts||[]).map(r=>({r,chance:r.Chance*(1+b('IncreasedSpecialProductChance',r.Item))+b('FlatSpecialProductChance',r.Item)}))
+   .sort((a,b)=>a.chance-b.chance);
+  let miss=1,special=0;
+  for(const {r,chance} of specials){
+   const p=probability(chance);
+   special+=miss*p*Math.max(0,r.Quantity+Math.trunc(b('FlatSpecialProductQuantity',r.Item)))*sale(r.Item);
+   miss*=1-p;
+  }
+  return {xp,ms:interval,value:junk+(regular+special*(1+(1-miss)*probability(b('SecondSpecialItemChance'))))*double};
+ }
+ if(e.type==='FiremakingRecipe'){
+  const drops=value(o.Products,r=>probability(r.Chance*(1+b('IncreasedProductChance',r.Item))+b('FlatProductChance',r.Item)),
+   r=>r.Quantity+Math.trunc(b('FlatProductQuantity',r.Item)));
+  const baseCash=cash(o.CurrencyReward);
+  const gold=baseCash?Math.max(1,Math.trunc(baseCash*(1+b('PercentCurrencyReward'))+b('FlatCurrencyReward'))):0;
+  return {xp,ms:interval,value:(drops+gold)*double};
+ }
+ const cooking=e.type==='CookingRecipe';
+ const success=cooking?probability((69+Math.max(0,saveLevel('Cooking',save)+b('FlatProficiency')))/(69+Math.max(0,o.Difficulty+b('FlatDifficulty')))):1;
+ const rewards=value(o.Products,r=>r.Chance??1,r=>Math.max(1,Math.trunc((r.Quantity+b('FlatProductQuantity',r.Item))*(1+b('PercentProductQuantity',r.Item)))));
+ if(cooking)return {xp:xp*success,ms:interval,value:rewards*success*double,successChance:success};
+ const skip=probability(b('SkipStepChance')),steps=Math.max(1,o.Steps+Math.trunc(b('FlatSteps')));
+ return {xp,ms:interval/Math.max(1,o.Steps)*expectedSteps(steps,[[1,1-skip],[2,skip]]),value:rewards*double};
+}
+
 // Recipe numbers with the player's bonuses; with no save they equal the base columns.
 function savedRecipeStats(e,save){
  const skill=recipeSkill(e),baseXp=e.obj.BaseExperience;
  if(!save||!skill)return {xp:baseXp,ms:recipeTime(e),value:recipeValue(e),applied:[]};
  const t=boostTotals(save,skill,e),xp=baseXp==null?baseXp:baseXp*(1+t.xp);
  if(t.thieving)return savedThievingStats(e,save,t,xp);
+ if(t.model)return {...savedModeledRecipeStats(e,save,t,xp),applied:t.applied};
  const double=1+Math.min(1,Math.max(0,t.doubling));
  const value=(recipeValue(e)*(1+t.percentQuantity)+t.quantity*primaryValue(e))*double;
  return {xp,ms:recipeTime(e)?savedRecipeTime(e,t):null,value,applied:t.applied};
