@@ -9,8 +9,8 @@ function createCombatKernel(){
  function hitChance(accuracy,evasion){
   return accuracy<evasion?accuracy/(2*evasion):1-evasion/(2*accuracy);
  }
- function resistance(power,protection,triangle=0){
-  return clamp(clamp(protection/(power+protection),0,.7)*(1+triangle),0,1);
+ function resistance(power,protection,triangle=0,flat=0,percent=0){
+  return clamp(clamp((protection/(power+protection)+flat)*(1+percent),0,.7)*(1+triangle),0,1);
  }
  function damage(raw,factor,ward,maxWard,armour){
   if(raw<=0)return 0;
@@ -20,7 +20,7 @@ function createCombatKernel(){
   const end=Math.floor(seconds*tickRate),spawn=ticks(spawnSeconds*1000),playerInterval=ticks(player.interval);
   let state=seed>>>0,completed=0,events=0;
   let damageSum=0,damageSquare=0,killSum=0,killSquare=0;
-  let enemyHp=0,ward=0,enemyWard=0,armour=0,enemyArmour=0;
+  let enemyHp=0;
   let playerAt=0,enemyAt=0,spawnAt=spawn,profile,attack,hitIndex=0,trialDamage=0,trialKills=0;
   function random(){
    state=(state+0x6D2B79F5)|0;
@@ -35,8 +35,156 @@ function createCombatKernel(){
    for(const row of rows)if(r<row.until)return row;
    return rows[rows.length-1];
   }
+  const effects=[new Map(),new Map()],lastHit=[0,0],wardLost=[0,0],broken=[false,false];
+  let tick=0,playerTurn=false,enemyTurn=false;
+  function mod(side,name,key){
+   let n=0;
+   for(const [stat,scope,value] of profile.base?.[side]||[])if(stat===name&&(!scope||scope===key))n+=value;
+   for(const {rule,stacks} of effects[side].values())
+    for(const [stat,scope,value] of rule.mods)if(stat===name&&(!scope||scope===key))n+=value*stacks;
+   return n;
+  }
+  function interval(side){
+   const base=profile.ratings?.[side].interval;
+   return base===undefined?(side?profile.interval:playerInterval):ticks(Math.max(250,Math.floor(base*(1+mod(side,'PercentAttackInterval')))));
+  }
+  function chance(value){return value>=1||value>0&&random()<value;}
+  function accuracy(side){
+   const base=profile.ratings[side].accuracy;
+   return Math.max(1,Math.floor(base*(1+mod(side,'PercentAccuracyRating'))));
+  }
+  function evasion(side){
+   const base=profile.ratings[side].evasion;
+   return Math.max(1,Math.floor(base*(1+mod(side,'PercentEvasionRating'))+mod(side,'FlatEvasionRating')));
+  }
+  function maxHit(side){
+   const base=side?profile.enemyMax:profile.playerMax;
+   return Math.max(1,Math.floor(base*(1+mod(side,'PercentMaxHit'))));
+  }
+  function minHit(side,max){
+   if(!side)return Math.min(max,profile.playerMin);
+   return clamp(Math.floor(1+max*mod(side,'MinHitBasedOnMaxHit')),1,max);
+  }
+  function stat(side,base,key){
+   return (base+mod(side,'FlatCombatStatValue',key))*(1+mod(side,'PercentCombatStatValue',key));
+  }
+  function armour(side){return broken[side]?0:Math.max(0,Math.round(stat(side,side?profile.armour:player.armour,'MelvorBase:Armour')));}
+  function maxWard(side){return Math.max(0,Math.round(stat(side,side?profile.ward:player.ward,'MelvorBase:MaximumWard')));}
+  function currentWard(side,max){return Math.max(0,max-wardLost[side]);}
+  function factor(source,target,type){
+   if(!profile.ratings)return source?attack.factor:profile.playerFactor;
+   const power=(source?profile.enemyPower[type]:player.power[type])??0;
+   const protection=(target?profile.enemyProtection:player.protection[type])??0;
+   const modifiedPower=Math.max(1,Math.trunc((power+mod(source,'FlatPowerRating',type))*(1+mod(source,'PercentPowerRating',type))));
+   const modifiedProtection=Math.max(0,Math.trunc((protection+mod(target,'FlatProtectionRating',type))*(1+mod(target,'PercentProtectionRating',type))));
+   const triangle=source===1&&target===0?profile.resistTriangle:0;
+   return 1-resistance(modifiedPower,modifiedProtection,triangle,mod(target,'FlatResistance',type),mod(target,'PercentResistance',type));
+  }
+  function effectValue(f){
+   const {kind,actor,value}=f;
+   if(kind==='Fixed')return value;
+   if(kind==='DamageDealt')return Math.trunc(lastHit[actor]*value);
+   if(kind==='CurrentHitpoints')return Math.trunc(enemyHp*value);
+   if(kind==='MaxHitpoints')return Math.trunc(profile.hp*value);
+   const max=maxHit(actor);
+   return kind==='MaxHit'?Math.trunc(max*value):roll(Math.trunc(minHit(actor,max)*value),Math.trunc(max*value));
+  }
+  function recordDamage(side,amount){
+   if(!side){trialDamage+=amount;return amount;}
+   const taken=Math.min(enemyHp,amount);
+   enemyHp-=taken;return taken;
+  }
+  function healEnemy(amount){if(enemyHp>0)enemyHp=Math.min(profile.hp,enemyHp+amount);}
+  function effectDamage(rule,type,raw,reflect=false){
+   const {owner,target,id}=rule;
+   if(!reflect&&currentWard(target,maxWard(target)))return;
+   const sourceStyle=profile.ratings?.[owner].style;
+   const extra=reflect?0:mod(target,'EffectDamageTaken',id);
+   const taken=mod(target,'PercentDamageTaken')+mod(target,'PercentDamageTakenFrom',sourceStyle)+extra;
+   const amount=Math.max(1,Math.floor(raw*(1+mod(owner,'PercentDamageDealt'))*(1+taken)*factor(owner,target,type)-armour(target)));
+   const received=recordDamage(target,reflect&&target?Math.min(amount,Math.max(0,enemyHp-1)):amount);
+   const steal=reflect?0:mod(owner,'EffectLifesteal',id);
+   if(owner&&steal>0&&received>0)healEnemy(Math.max(1,Math.floor(received*steal)));
+  }
+  function apply(rules,type){
+   for(const rule of rules||[]){
+    const {target,id,owner,kind}=rule;
+    if(!chance(rule.chance)||(!rule.positive&&currentWard(target,maxWard(target)))||
+       (owner!==target&&mod(target,'ImmunityFrom',profile.ratings?.[owner].style)>0)||chance(mod(target,'AvoidanceChance',id)))continue;
+    const map=effects[target],current=map.get(id);
+    const damageType=type||profile.ratings?.[owner].type;
+    if(current){
+     if(!['Stacking','DamageOverTime'].includes(kind))continue;
+     const add=Math.min(rule.stacks,rule.maxStacks-current.stacks);
+     if(add>0){
+      current.stacks+=add;
+      if(rule.formula)current.raw+=add*Math.max(1,effectValue(rule.formula));
+     }
+     continue;
+    }
+    const stacks=kind==='RandomMagnitude'?roll(rule.minStacks,rule.maxStacks):
+     rule.stacks===undefined?1:Math.min(rule.stacks,rule.maxStacks);
+    map.set(id,{rule,stacks,turns:rule.turns,skip:kind!=='Stun'&&(target?enemyTurn:playerTurn),next:kind==='DamageOverTime'?tick+rule.interval:Infinity,
+     left:rule.procs,raw:kind==='DamageOverTime'&&rule.formula?Math.max(1,effectValue(rule.formula))*stacks:0,type:damageType});
+    if(kind==='Stun'){
+     if(target){enemyAt=tick+interval(1);hitIndex=0;enemyTurn=false;}
+     else{playerAt=tick+interval(0);playerTurn=false;}
+    }
+   }
+  }
+  function trigger(side,event,type){apply(profile.hooks?.[side][event],type);}
+  function afterAttack(side,hit,first,type){
+   const target=1-side;
+   trigger(side,'OnAttack',type);
+   if(first)trigger(side,'OnFirstAttack',type);
+   if(hit)trigger(side,'OnHit',type);
+   trigger(target,'WhenAttacked');
+   trigger(target,hit?'WhenHit':'WhenAttackEvaded');
+  }
+  function stunned(side){for(const {rule} of effects[side].values())if(rule.kind==='Stun')return true;return false;}
+  function endTurn(side){
+   const map=effects[side];
+   for(const [id,e] of [...map]){
+    const {rule,type}=e;
+    if(rule.kind==='EndOfTurnDamage'&&rule.formula)effectDamage(rule,type,effectValue(rule.formula));
+    if(rule.kind==='EndOfTurnHealing'&&rule.formula)healEnemy(effectValue(rule.formula));
+    if(e.skip)e.skip=false;
+    else if(e.turns!==undefined&&--e.turns<=0){
+     map.delete(id);
+     if(rule.removal)apply([rule.removal],type);
+    }
+   }
+  }
+  function nextProc(){
+   let next=Infinity;
+   for(const map of effects)for(const e of map.values())next=Math.min(next,e.next);
+   return next;
+  }
+  function tickEffects(){
+   for(const map of effects)for(const [id,e] of map){
+    if(e.next!==tick)continue;
+    if(e.rule.formula)effectDamage(e.rule,e.type,e.raw);
+    if(--e.left<=0)map.delete(id);
+    else e.next+=e.rule.interval;
+   }
+  }
+  function strike(side,raw,type){
+   if(raw<=0)return 0;
+   const target=1-side,max=maxWard(target),a=armour(target),w=currentWard(target,max),sourceStyle=profile.ratings?.[side].style;
+   const taken=mod(target,'PercentDamageTaken')+mod(target,'PercentDamageTakenFrom',sourceStyle)+mod(target,'PercentDamageTakenFromAttacks',type);
+   const amount=damage(raw*(1+mod(side,'PercentDamageDealt'))*(1+taken),factor(side,target,type),w,max,a);
+   const received=recordDamage(target,amount);
+   if(w)wardLost[target]++;
+   if(a&&amount>=a)broken[target]=true;
+   const reflect=mod(target,'PercentAttackReflect');
+   if(reflect>0&&received>0)effectDamage({owner:target,target:side},type,Math.trunc(received*reflect),true);
+   const steal=side?stat(1,profile.lifesteal,'MelvorBase:Lifesteal'):0;
+   if(steal>0&&received>0)healEnemy(Math.max(1,Math.floor(received*steal)));
+   return received;
+  }
   function finish(){
    completed++;
+   effects[0].clear();effects[1].clear();
    damageSum+=trialDamage;damageSquare+=trialDamage*trialDamage;
    killSum+=trialKills;killSquare+=trialKills*trialKills;
    trialDamage=0;trialKills=0;spawnAt=spawn;
@@ -53,50 +201,73 @@ function createCombatKernel(){
    while(completed<samples&&limit-->0){
     if(++events>workLimit)throw new Error('超过本次计算上限，请缩短时长或减少模拟次数。');
     if(spawnAt!==null){
-     if(spawnAt+Math.min(playerInterval,profiles[0].interval)>end&&profiles.length===1){finish();continue;}
+     const due=nextProc();
+     if(due<=spawnAt&&due<=end){tick=due;tickEffects();continue;}
+     if(spawnAt>end){finish();continue;}
      profile=weighted(profiles);
-     playerAt=spawnAt+playerInterval;enemyAt=spawnAt+profile.interval;spawnAt=null;
-     enemyHp=profile.hp;enemyWard=profile.ward;enemyArmour=profile.armour;
-     ward=player.ward;armour=player.armour;attack=weighted(profile.attacks);hitIndex=0;
+     tick=spawnAt;spawnAt=null;
+     enemyHp=profile.hp;attack=weighted(profile.attacks);hitIndex=0;enemyTurn=false;
+     for(let side=0;side<2;side++){lastHit[side]=wardLost[side]=0;broken[side]=false;}
+     playerAt=tick+interval(0);enemyAt=tick+interval(1);
+     trigger(0,'AtStartOfFight');trigger(1,'AtStartOfFight');
     }
-    const tick=Math.min(playerAt,enemyAt);
+    tick=Math.min(playerAt,enemyAt,nextProc());
     if(tick>end){finish();continue;}
+    tickEffects();
     if(playerAt===tick){
-     playerAt+=playerInterval;
-     if(profile.playerHit>0&&(profile.playerHit===1||random()<profile.playerHit)){
-      let raw=roll(profile.playerMin,profile.playerMax);
-      if(player.crit>0&&random()<player.crit)raw=Math.floor(raw*player.critMultiplier);
-      if(raw>0){
-       const hit=damage(raw,profile.playerFactor,enemyWard,profile.ward,enemyArmour);
-       enemyHp=Math.max(0,enemyHp-hit);
-       if(enemyWard>0)enemyWard--;
-       if(hit>=enemyArmour)enemyArmour=0;
+     if(!stunned(0)){
+      playerTurn=true;
+      const type=profile.ratings?.[0].type;
+      const hit=mod(1,'ImmunityFrom',profile.ratings?.[0].style)<=0&&chance(profile.ratings?hitChance(accuracy(0),evasion(1)):profile.playerHit);
+      lastHit[0]=0;
+      if(hit){
+       const max=maxHit(0);
+       let raw=roll(minHit(0,max),max);
+       if(chance(player.crit))raw=Math.floor(raw*player.critMultiplier);
+       lastHit[0]=strike(0,raw,type);
       }
+      afterAttack(0,hit,true,type);
      }
+     playerTurn=false;
+     if(playerAt===tick){endTurn(0);playerAt=tick+interval(0);}
     }
-    // Both actors attack on the same tick before processing the enemy's death.
+    // Both actors resolve attacks at the same tick before checking the enemy's death.
     while(enemyAt===tick){
-     const hit=attack.hits[hitIndex];
-     if(!attack.avoidable||profile.enemyHit===1||(profile.enemyHit>0&&random()<profile.enemyHit)){
-      let raw=0;
-      for(let i=0;i<hit.damage.length;i++){
-       const part=hit.damage[i],kind=part[0];
-       raw+=kind===0?roll(part[1],part[2]):Math.trunc(enemyHp*part[2]);
-      }
-      if(raw>0){
-       const amount=damage(raw,attack.factor,ward,player.ward,armour);
-       trialDamage+=amount;
-       if(ward>0)ward--;
-       if(amount>=armour)armour=0;
-       if(profile.lifesteal>0&&enemyHp>0)enemyHp=Math.min(profile.hp,enemyHp+Math.max(1,Math.floor(amount*profile.lifesteal)));
-      }
+     if(stunned(1)){
+      endTurn(1);enemyAt=tick+interval(1);attack=weighted(profile.attacks);break;
      }
+     enemyTurn=true;
+     const {type}=attack,partIndex=hitIndex;
+     apply(attack.before,type);
+     const hit=mod(0,'ImmunityFrom',profile.ratings?.[1].style)<=0&&
+      (!attack.avoidable||chance(profile.ratings?hitChance(accuracy(1),evasion(0)):profile.enemyHit));
+     lastHit[1]=0;
+     if(hit){
+      let raw=0;
+      for(const [kind,low,high,percent,maxOnly] of attack.hits[partIndex].damage){
+       if(kind===1)raw+=Math.trunc(enemyHp*high);
+       else if(percent===undefined)raw+=roll(low,high);
+       else{
+        const max=maxHit(1);
+        raw+=roll(Math.trunc((maxOnly?max:minHit(1,max))*percent),Math.trunc(max*percent));
+       }
+      }
+      lastHit[1]=strike(1,raw,type);
+      apply(attack.onHit,type);
+     }
+     afterAttack(1,hit,partIndex===0,type);
+     if(enemyAt!==tick)continue;
      hitIndex++;
      if(hitIndex===attack.hits.length){
-      enemyAt+=profile.interval;attack=weighted(profile.attacks);hitIndex=0;
+      enemyTurn=false;endTurn(1);enemyAt=tick+interval(1);attack=weighted(profile.attacks);hitIndex=0;
      }else enemyAt+=attack.hits[hitIndex].wait-(hitIndex===1?1:0);
     }
-    if(!enemyHp){trialKills++;spawnAt=tick+spawn;}
+    if(!enemyHp){
+     trialKills++;spawnAt=tick+spawn;effects[1].clear();
+     trigger(1,'OnDeath');
+     // Timed damage persists between fights; turn-based effects end with the fight.
+     for(const [id,e] of effects[0])if(e.rule.kind!=='DamageOverTime')effects[0].delete(id);
+    }
    }
    return completed===samples;
   }
@@ -261,7 +432,101 @@ function savedCombatFields(save){
  return {fields,missingSpell:style.UsesSpells&&!spell};
 }
 
-function compileCombatEnemy(entry,player){
+function combatAreaEffect(area,save){
+ const effect=area?.obj.Effect;
+ if(!effect)return {magnitude:0};
+ const ns=G.Namespace+':';
+ let disabled=0,flat=0;
+ for(const {m,times} of save?[...playerBoostsCache(save),...equippedSaveBoosts(save)]:[]){
+  if(m.Stat?.StatsType!==ns+'CombatAreas'||m.Scaling)continue;
+  const ctx=m.LocalContext||{},component=ctx.Component;
+  if(component&&(component.Entity!==ns+'Combat'||component.Component!=='Areas'))continue;
+  if(ctx.Area&&ctx.Area!==ns+area.obj.Id||ctx.Category&&ctx.Category!==area.obj.Category)continue;
+  if(Object.keys(ctx).some(k=>!['Component','Area','Category'].includes(k)&&ctx[k]!=null))continue;
+  if(m.Stat.Name==='DisableAreaEffect')disabled+=m.Value*times;
+  if(m.Stat.Name==='FlatAreaEffectMagnitude')flat+=m.Value*times;
+ }
+ return {disabled:disabled>0,magnitude:disabled>0?0:Math.max(0,effect.Magnitude+Math.trunc(flat*100))};
+}
+
+function compileCombatEffects(enemy,area,areaEffect,limits){
+ const base=[[],[]],hooks=[{},{}],ns=G.Namespace+':';
+ const side=component=>component==='Player'?0:component==='Enemy'?1:-1;
+ const stats=new Set(['PercentAccuracyRating','PercentEvasionRating','FlatEvasionRating','PercentAttackInterval','PercentMaxHit',
+  'MinHitBasedOnMaxHit','PercentDamageDealt','PercentDamageTaken','PercentDamageTakenFrom','PercentDamageTakenFromAttacks',
+  'PercentAttackReflect','FlatPowerRating','PercentPowerRating','FlatProtectionRating','PercentProtectionRating','FlatResistance','PercentResistance',
+  'ImmunityFrom','AvoidanceChance','EffectLifesteal','FlatCombatStatValue','PercentCombatStatValue']);
+ function modifier(m,magnitude){
+  const ctx=m.LocalContext||{},type=shortId(m.Stat?.StatsType),name=m.Stat?.Name;
+  const scope=Object.entries(ctx).filter(([k,v])=>k!=='Component'&&v!=null);
+  if(!['Character','CombatEffect','Target'].includes(type)||!stats.has(name)||m.Scaling||m.Condition||m.FromContext||
+     scope.length>1||scope.some(([k])=>!['CombatStyle','DamageType','CombatStat','Effect'].includes(k)))return null;
+  return [type==='CombatEffect'&&name==='PercentDamageTaken'?'EffectDamageTaken':name,scope[0]?.[1]||'',m.Value*magnitude];
+ }
+ function formula(row,source,target,label){
+  const kind=shortId(row?.Formula?.Type),value=row?.Formula?.Data;
+  if(kind==='Fixed'&&Number.isFinite(value.Damage))return {kind:'Fixed',value:value.Damage};
+  const actor=row?.Character==='Source'?source:target;
+  if(['NormalDamage','MaxHit','DamageDealt','CurrentHitpoints','MaxHitpoints'].includes(kind)&&Number.isFinite(value.Percent)){
+   if(actor===0&&['CurrentHitpoints','MaxHitpoints'].includes(kind)){limits.add('按玩家生命值计算的效果 '+label);return null;}
+   return {kind,actor,value:value.Percent};
+  }
+  limits.add('效果数值 '+label);
+  return null;
+ }
+ function grant(row,owner,magnitude=1,depth=0){
+  const {Type,Data}=row.Effect||{},kind=shortId(Type),id=Data?.Effect;
+  const entry=byKey.get(kind+'Effect/'+shortId(id)),o=entry?.obj;
+  const target=row.AppliesTo==='Self'?owner:1-owner;
+  const label=entry?.title||'（游戏数据未解析）';
+  if(!o||depth>3||!['TurnCounting','Stun','Stacking','RandomMagnitude','DamageOverTime','EndOfTurnDamage','EndOfTurnHealing'].includes(kind)){
+   limits.add('战斗效果 '+label);return null;
+  }
+  const mods=[],records=Array.isArray(o.Modifiers)?o.Modifiers:o.Modifiers?.Component||[];
+  for(const m of records){const compiled=modifier(m,1);if(compiled)mods.push(compiled);else limits.add('效果修饰 '+label);}
+  if(o.Modifiers?.Global?.length||o.Modifiers?.CombatEffect?.length)limits.add('效果修饰 '+label);
+  const config=Data.Configuration||{},out={id,kind,owner,target,positive:o.IsPositive,chance:Math.min(1,(row.Chance??1)*magnitude),mods,
+   turns:config.Turns??o.DefaultTurns,stacks:config.StacksToAdd??o.DefaultStacksToAdd,maxStacks:o.MaxStacks};
+  if(kind==='RandomMagnitude'){
+   out.minStacks=config.MinStacks??o.DefaultMinStacks;out.maxStacks=config.MaxStacks??o.DefaultMaxStacks;
+  }
+  if(o.RemovalEffect)out.removal=grant({Effect:o.RemovalEffect,AppliesTo:row.AppliesTo},owner,1,depth+1);
+  if(kind==='DamageOverTime'){
+   out.formula=formula(o.DamagePerProc,owner,target,label);
+   out.interval=combatKernel.ticks(o.ProcInterval);out.procs=o.ProcCount;
+   if(o.ShouldInterruptTurn)limits.add('中断回合 '+label);
+  }
+  if(kind==='EndOfTurnDamage')out.formula=formula(o.DamagePerTurn,owner,target,label);
+  if(kind==='EndOfTurnHealing'&&target===1)out.formula=formula(o.HealingPerTurn,owner,target,label);
+  return out;
+ }
+ function bundle(mods,label,magnitude=1){
+  if(!mods){limits.add(label);return;}
+  if(mods.Global?.length)limits.add(label);
+  for(const m of mods.Component||[]){
+   if(m.Stat?.StatsType===ns+'CombatFood')continue;
+   const actor=side(m.LocalContext?.Component?.Component),compiled=modifier(m,magnitude);
+   if(actor<0||!compiled)limits.add(label);else base[actor].push(compiled);
+  }
+  for(const row of mods.CombatEffect||[]){
+   const actor=side(row.Character?.Component),trigger=row.Modifier?.Trigger,kind=shortId(trigger?.Type);
+   const event=trigger?.Data?.Type||kind;
+   if(actor<0||row.Condition||row.Scaling||!['AtStartOfFight','OnDeath','OnAttack','OnHit','OnFirstAttack','WhenAttacked','WhenHit','WhenAttackEvaded'].includes(event)){
+    limits.add(label);continue;
+   }
+   const effect=grant({...row.Modifier,Chance:row.Chance},actor,magnitude);
+   if(effect)(hooks[actor][event]??=[]).push(effect);
+  }
+ }
+ for(const id of new Set([...(enemy.Passives||[]),...(area?.obj.Passives||[])])){
+  const passive=byKey.get('CombatPassive/'+shortId(id));
+  bundle(passive?.obj.Modifiers,'被动 '+(passive?.title||'（游戏数据未解析）'));
+ }
+ if(areaEffect.magnitude>0)bundle(area.obj.Effect.Modifiers,'区域效果 '+area.title,areaEffect.magnitude);
+ return {base,hooks,grant};
+}
+
+function compileCombatEnemy(entry,player,area,save){
  const enemy=entry.obj,limits=new Set();
  const {ticks,hitChance,resistance}=combatKernel;
  const get=(type,id)=>byKey.get(type+'/'+shortId(id));
@@ -270,22 +535,10 @@ function compileCombatEnemy(entry,player){
  const getRating=(field,id)=>(enemy.Stats?.[field]||[]).find(r=>r.DamageType===id)?.Value??0;
  const weightedLevel=rows=>(rows||[]).reduce((total,r)=>total+(levels.get(r.Level)??1)*r.Ratio,0);
  const playerStyle=get('AttackStance',player.stance)?.obj.CombatStyle;
- const playerElement=player.element;
- let immune=false,minHitFraction=0;
- for(const id of enemy.Passives||[]){
-  const passive=get('CombatPassive',id),mods=passive?.obj.Modifiers;
-  let partial=!mods||!!(mods.CombatEffect?.length||mods.Global?.length);
-  for(const m of mods?.Component||[]){
-   const scope=m.LocalContext;
-   const applies=scope?.Component?.Entity===G.Namespace+':Combat'&&scope.Component.Component==='Enemy';
-   const fixed=applies&&!m.Condition&&!m.Scaling&&!m.FromContext&&Object.keys(scope).every(k=>['Component','CombatStyle'].includes(k)||scope[k]==null);
-   if(fixed&&m.Stat?.Name==='ImmunityFrom')immune||=m.Value>0&&(!scope.CombatStyle||scope.CombatStyle===playerStyle);
-   else if(fixed&&!scope.CombatStyle&&m.Stat?.Name==='MinHitBasedOnMaxHit')minHitFraction+=m.Value;
-   else partial=true;
-  }
-  if(partial)limits.add('被动 '+(passive?.title||'（游戏数据未解析）'));
- }
+ const playerElement=player.element,areaEffect=combatAreaEffect(area,save);
+ const {base,hooks,grant}=compileCombatEffects(enemy,area,areaEffect,limits);
  if(enemy.PauseOnSpawn)limits.add('生成时自动暂停');
+ if(area?.obj.Darkness>0)limits.add('区域黑暗度');
  const normal=G.Namespace+':Normal';
  const distribution=new Map();
  for(const r of enemy.Attacks||[])if(r.Chance>0)distribution.set(r.Attack,(distribution.get(r.Attack)||0)+r.Chance);
@@ -302,7 +555,8 @@ function compileCombatEnemy(entry,player){
   const defendingStyle=get('CombatStyle',defendingStance.CombatStyle)?.obj;
   if(!style||!defendingStyle)throw new Error('游戏数据中缺少战斗方式。');
   const max=Math.max(1,combatBaseMaxHit(style,weightedLevel,id=>stat.get(id)||0));
-  const min=Math.min(max,Math.max(1,Math.floor(1+max*minHitFraction)));
+  const minFraction=base[1].reduce((n,[stat,key,value])=>n+(stat==='MinHitBasedOnMaxHit'&&!key?value:0),0);
+  const min=Math.min(max,Math.max(1,Math.floor(1+max*minFraction)));
   const triangle=(G.Objects.CombatTriangleBonus||[]).find(b=>b.PlayerStyle===playerStyle&&b.EnemyStyle===stance.CombatStyle);
   const elemental=(G.Objects.ElementalBonus||[]).find(b=>b.PlayerElement===playerElement&&b.EnemyElement===enemy.Element);
   const bonus=(entry,name)=>(entry?.Bonuses?.Component||[]).filter(m=>m.Stat.Name===name).reduce((n,m)=>n+m.Value,0);
@@ -311,15 +565,17 @@ function compileCombatEnemy(entry,player){
   const attacks=[...distribution].map(([id,weight])=>{
    const attackEntry=get('Attack',id),attack=attackEntry?.obj||get('Attack',normal)?.obj;
    if(!attack?.Hits?.length)throw new Error('游戏数据中缺少攻击的伤害配置。');
-   if(!attackEntry||attack.PreHitEffects?.length||attack.OnHitEffects?.length)limits.add('攻击效果 '+(attackEntry?.title||'（游戏数据未解析）'));
+   if(!attackEntry)limits.add('攻击效果 （游戏数据未解析）');
+   const before=(attack.PreHitEffects||[]).map(row=>grant(row,1)).filter(Boolean);
+   const onHit=(attack.OnHitEffects||[]).map(row=>grant(row,1)).filter(Boolean);
    const type=attack.DamageType||enemy.DamageType||normal;
    const factor=1-resistance(Math.max(1,getRating('PowerRatings',type)),player.protection[type]??0,bonus(triangle,'ResistanceCombatTriangle'));
    const hits=attack.Hits.flatMap(hit=>{
     const parts=hit.Damage.map(({Character,Formula})=>{
      const kind=shortId(Formula.Type),percent=Formula.Data?.Percent;
      if(Number.isFinite(percent)){
-      if(kind==='NormalDamage'&&Character==='Attacker')return [0,Math.trunc(min*percent),Math.trunc(max*percent)];
-      if(kind==='MaxHit'&&Character==='Attacker')return [0,Math.trunc(max*percent),Math.trunc(max*percent)];
+      if(kind==='NormalDamage'&&Character==='Attacker')return [0,Math.trunc(min*percent),Math.trunc(max*percent),percent,false];
+      if(kind==='MaxHit'&&Character==='Attacker')return [0,Math.trunc(max*percent),Math.trunc(max*percent),percent,true];
       if(kind==='CurrentHitpoints'&&Character==='Attacker')return [1,0,percent];
      }
      const playerHpDamage=(kind==='CurrentHitpoints'||kind==='MaxHitpoints')&&['Defender','Target'].includes(Character);
@@ -330,7 +586,7 @@ function compileCombatEnemy(entry,player){
    });
    if(!hits.length)throw new Error('游戏数据中缺少有效攻击段数。');
    attackUntil+=weight/weights;
-   return {hits,until:attackUntil,factor,avoidable:attack.IsAvoidable!==false};
+   return {hits,until:attackUntil,factor,avoidable:attack.IsAvoidable!==false,before,onHit,type};
   });
   const evasion=Math.max(1,combatBaseRating(weightedLevel(defendingStyle.EvasionLevels),stat.get(defendingStance.EvasionStat)||0));
   const accuracy=Math.max(1,combatBaseRating(weightedLevel(style.AccuracyRatingLevels),stat.get(stance.AccuracyStat)||0));
@@ -340,12 +596,17 @@ function compileCombatEnemy(entry,player){
    interval:ticks(Math.max(250,stat.get(style.AttackIntervalStat)??250)),
    ward:Math.max(0,Math.trunc(stat.get(style.MaxWardStat)||0)),armour:Math.max(0,Math.trunc(stat.get(style.ArmourStat)||0)),
    lifesteal:Math.max(0,stat.get(style.LifestealStat)||0),attacks,
-   playerMin:Math.min(player.min,playerMax),playerMax,playerHit:immune?0:hitChance(player.accuracy,evasion),
+   playerMin:Math.min(player.min,playerMax),playerMax,playerHit:hitChance(player.accuracy,evasion),
    playerFactor:1-resistance(player.power[player.damageType]??1,getRating('ProtectionRatings',player.damageType)),
-   enemyHit:hitChance(accuracy,player.evasion[s.Stance]??1)
+   enemyHit:hitChance(accuracy,player.evasion[s.Stance]??1),
+   ratings:[{accuracy:player.accuracy,evasion:player.evasion[s.Stance]??1,style:playerStyle,type:player.damageType,interval:player.interval},
+    {accuracy,evasion,style:stance.CombatStyle,type:enemy.DamageType||normal,interval:Math.max(250,stat.get(style.AttackIntervalStat)??250)}],
+   enemyMax:max,enemyProtection:getRating('ProtectionRatings',player.damageType),
+   enemyPower:Object.fromEntries((enemy.Stats?.PowerRatings||[]).map(r=>[r.DamageType,r.Value])),
+   resistTriangle:bonus(triangle,'ResistanceCombatTriangle'),base,hooks
   };
  });
- return {profiles,limits:[...limits]};
+ return {profiles,limits:[...limits],areaEffect};
 }
 
 function simulationEnemyOptions(area,selected){
@@ -374,7 +635,7 @@ function combatSimulatorPage(){
  const stances=(G.Objects.AttackStance||[]).map(s=>number(titleOf('AttackStance',s.Id),'evasion-'+s.Id,640,1,1000000)).join('');
  const ratings=(G.Objects.DamageType||[]).map(s=>number(titleOf('DamageType',s.Id)+'战力值','power-'+s.Id,63,1,1000000)+
   number(titleOf('DamageType',s.Id)+'防护值','protection-'+s.Id,0,0,1000000)).join('');
- $('detail').innerHTML='<h2>战斗模拟器</h2><p>每次试验累计完整模拟时长内受到的伤害。玩家使用普通攻击，击杀后等待怪物重生。扣血量已计入躲避、防护、护盾和护甲。</p>'+
+ $('detail').innerHTML='<h2>战斗模拟器</h2><p>每次试验累计完整模拟时长内受到的伤害。玩家使用普通攻击，击杀后等待怪物重生。计算会计入支持的敌人特殊攻击和区域效果，按导入存档中的商店购买记录判断区域免疫。</p>'+
   '<form id="combat-sim-form"><section><h3>怪物与模拟时长</h3><div class="combat-setup">'+select('区域','area',areas)+select('怪物','enemy',simulationEnemyOptions(area,selectedEnemy))+
   number('模拟时长（秒）','seconds',60,.1,604800,'any')+number('模拟次数','samples',1024,32,16384)+'</div></section>'+
   '<section><h3>战斗属性</h3><p>'+(saved?'已按存档中的等级、当前装备、姿态、法术和可确认的长期加成估算。可手动调整。祈祷、套装和临时效果未计入。'+
@@ -413,10 +674,10 @@ function readCombatSimulation(form){
  if(player.min>player.max)throw new Error('最低伤害不能高于最高伤害。');
  const area=value('area'),enemy=simulationAreas.get(area)?.find(e=>e.key===value('enemy'));
  if(!enemy)throw new Error('请选择该区域中的怪物。');
- const {profiles,limits}=compileCombatEnemy(enemy,player);
+ const {profiles,limits,areaEffect}=compileCombatEnemy(enemy,player,byKey.get(area),playerSave);
  const input={player,profiles,seconds:number('seconds',.1,604800,false,'模拟时长'),
   spawnSeconds:combatSpawnSeconds(playerSave),samples:number('samples',32,16384,true,'模拟次数'),seed:Date.now()};
- return {enemy,dungeon:byKey.get(area)?.type==='Dungeon',limits,input};
+ return {enemy,dungeon:byKey.get(area)?.type==='Dungeon',areaEffect,limits,input};
 }
 
 function runCombatBatches(kernel,input,send,chunkMs){
@@ -445,16 +706,17 @@ function stopCombatSimulation(){
  combatSimulation.stop?.();
  combatSimulation=null;
 }
-function combatSimulationResults(enemy,dungeon,limits,result){
+function combatSimulationResults(enemy,dungeon,limits,result,areaEffect){
  const estimate=x=>fmt(x.mean)+' ± '+fmt(x.margin);
  const drops=(dungeon?[]:combatDropExpectations(enemy.obj)).map(([key,each])=>{
   const entry=byKey.get(key),expected=result.kills.mean*each;
   return [cell(entry?.title||'—',eLink(entry)),cell(each),cell(expected)];
  }).sort((a,b)=>b[2].value-a[2].value);
  const missing=limits.length?'<p class="note">以下机制未计入结果：'+esc(limits.join('、'))+'。</p>':'';
+ const areaNote=areaEffect?.disabled?'<p class="muted">已按存档中的区域免疫解除区域效果。</p>':'';
  return '<h3>'+eLink(enemy)+' · 模拟结果</h3>'+
   '<p><b>总扣血量</b> '+estimate(result.damage)+' HP　 <b>预计击杀</b> '+estimate(result.kills)+'</p>'+
-  '<p>'+fmt(result.seconds)+' 秒 · '+fmt(result.samples,0)+' 次试验。结果取各次试验的平均值，± 表示近似 95% 抽样误差。</p>'+missing+
+  '<p>'+fmt(result.seconds)+' 秒 · '+fmt(result.samples,0)+' 次试验。结果取各次试验的平均值，± 表示近似 95% 抽样误差。</p>'+areaNote+missing+
   '<h3>基础掉落期望</h3>'+(dungeon?'<p class="muted">地下城击杀没有掉落。此处仅模拟所选怪物的重复交战。</p>':
    drops.length?dataTable(['掉落','每次击杀期望','所选时长内期望'],drops):'<p class="muted">暂无基础掉落。</p>');
 }
@@ -465,7 +727,7 @@ function startCombatSimulation(form){
  let request;
  try{request=readCombatSimulation(form);}
  catch(error){status.textContent=error.message;return;}
- const {enemy,dungeon,limits,input}=request;
+ const {enemy,dungeon,areaEffect,limits,input}=request;
  const start=$('combat-sim-start'),cancel=$('combat-sim-cancel');
  start.disabled=true;cancel.disabled=false;
  status.textContent='正在模拟 '+enemy.title+'…';
@@ -476,7 +738,7 @@ function startCombatSimulation(form){
   if(message.error||message.result){
    stopCombatSimulation();start.disabled=false;cancel.disabled=true;
    status.textContent=message.error||'模拟完成。';
-   if(message.result)resultBox.innerHTML=combatSimulationResults(enemy,dungeon,limits,message.result);
+   if(message.result)resultBox.innerHTML=combatSimulationResults(enemy,dungeon,limits,message.result,areaEffect);
   }else status.textContent='已完成 '+fmt(message.completed,0)+' / '+fmt(input.samples,0)+' 次模拟。';
  }
  const fallback=()=>{session.stop=runCombatBatches(combatKernel,input,receive,7);};

@@ -252,6 +252,19 @@ assert.equal(combatRun(simultaneous+'input.profiles[0].playerHit=0;').damage.mea
 assert.equal(combatRun(simultaneous+'input.profiles[0].playerHit=0;input.player.ward=2;input.player.armour=3;').damage.mean,30);
 const multiHit=combatRun('input.seconds=5.3; input.player.interval=60000; input.profiles[0].interval=60; input.profiles[0].attacks[0].hits.push({damage:[[0,5,5]],wait:16});');
 assert.equal(multiHit.damage.mean,25);
+const dotRule={id:'MelvorBase:Burn',kind:'DamageOverTime',owner:1,target:0,chance:1,mods:[],stacks:1,maxStacks:1,interval:30,procs:2,formula:{kind:'Fixed',value:3}};
+const dotFight=simultaneous+'input.seconds=4.75;input.player.interval=60000;input.profiles[0].attacks[0].onHit='+JSON.stringify([dotRule])+';';
+assert.equal(combatRun(dotFight).damage.mean,13);
+assert.equal(combatRun(dotFight+'input.player.interval=1000;').damage.mean,13); // The final proc lands during respawn.
+assert.equal(combatRun(dotFight+'input.player.ward=2;').damage.mean,1);
+const stunRule={id:'MelvorBase:Stun',kind:'Stun',owner:1,target:0,chance:1,mods:[],turns:1};
+const stunFight=simultaneous+'input.seconds=5.1;input.profiles[0].hp=2;';
+assert.equal(combatRun(stunFight).kills.mean,1);
+assert.equal(combatRun(stunFight+'input.profiles[0].attacks[0].onHit='+JSON.stringify([stunRule])+';').kills.mean,0);
+const slowRule={id:'MelvorBase:Ensnared',kind:'TurnCounting',owner:0,target:0,chance:1,turns:1,mods:[['PercentAttackInterval','',.5]]};
+const slowFight='input.seconds=5.1;input.profiles[0].hp=2;input.profiles[0].ratings=[{accuracy:1000000,evasion:1,type:"MelvorBase:Normal",interval:1000},{accuracy:1,evasion:1,type:"MelvorBase:Normal",interval:2000}];input.profiles[0].enemyPower={};input.profiles[0].enemyProtection=0;input.player.power={};input.player.protection={};';
+assert.equal(combatRun(slowFight).kills.mean,1);
+assert.equal(combatRun(slowFight+'input.profiles[0].hooks=[{OnAttack:'+JSON.stringify([slowRule])+ '},{}];').kills.mean,0);
 const seeded=simultaneous+'input.profiles[0].playerHit=.5;';
 assert.deepEqual(combatRun(seeded),combatRun(seeded));
 const combatPlayer=`{
@@ -506,7 +519,20 @@ if (referenceSnapshot) {
  });
  assert.ok(Math.abs(run('combatDropValue(combatDropExpectations(byKey.get("Enemy/Golbin").obj))')-(27+119/23))<1e-12);
  assert.ok(run(`compileCombatEnemy(byKey.get('Enemy/MangroveMantis'),${combatPlayer}).profiles[0].attacks.some(a=>a.hits.length>1)`));
- assert.ok(run(`compileCombatEnemy(byKey.get('Enemy/Harpy'),${combatPlayer}).limits.some(limit=>limit.startsWith('攻击效果 '))`));
+ assert.ok(run(`compileCombatEnemy(byKey.get('Enemy/Harpy'),${combatPlayer}).profiles[0].attacks.some(a=>a.onHit.some(e=>e.id==='MelvorBase:Haste'))`));
+ const areaProfile=(enemy,area,shop)=>run(`compileCombatEnemy(byKey.get('Enemy/${enemy}'),${combatPlayer},byKey.get('CombatArea/${area}'),{...parseSave(decodeSaveString(SAVE_STRING)),shop:${JSON.stringify(shop)}})`);
+ const slimed=areaProfile('GreenSlime','SlimeForest',{'MelvorBase:SlimeForestRemoval':0});
+ assert.equal(slimed.profiles[0].hooks[0].OnAttack[0].id,'MelvorBase:Ensnared');
+ const protectedSlime=areaProfile('GreenSlime','SlimeForest',{'MelvorBase:SlimeForestRemoval':1});
+ assert.equal(protectedSlime.areaEffect.disabled,true);
+ assert.equal(protectedSlime.profiles[0].hooks[0].OnAttack,undefined);
+ assert.equal(protectedSlime.profiles[0].hooks[1].AtStartOfFight[0].id,'MelvorBase:Rejuvenate');
+ const dragon=areaProfile('Drake','DragonsPass',{'MelvorBase:SlimeForestRemoval':1});
+ assert.ok(dragon.profiles[0].base[0].some(([name,,value])=>name==='PercentAccuracyRating'&&value===-.2));
+ assert.equal(areaProfile('Drake','DragonsPass',{'MelvorBase:DragonsPassRemoval':1}).areaEffect.disabled,true);
+ const sand=areaProfile('SandSpitter','SeaOfSand',{'MelvorBase:SeaofSandRemoval':1});
+ assert.equal(sand.areaEffect.disabled,true);
+ assert.equal(areaProfile('SandScorpion','DesertPlains',{}).profiles[0].hooks[1].WhenHit[0].kind,'RandomMagnitude');
  const mining=shopPage.match(/<h3[^>]*><img[^>]*>采矿<\/h3>([^]*?)<\/section>/)?.[1];
  assert.ok(mining,'The shop should have a Mining category');
  assert.match(mining,/<h4[^>]*>采矿工具<\/h4>[^]*?ShopPurchase%2FCopperPickaxe"[^]*?<h4[^>]*>采矿常规升级<\/h4><p class="muted">暂无购买项目。<\/p>/);
