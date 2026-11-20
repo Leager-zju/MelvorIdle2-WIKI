@@ -216,10 +216,11 @@ assert.equal(request.input.spawnSeconds,3);
 combatDefaults.area='CombatArea/SlimeForest';
 assert.throws(()=>run('readCombatSimulation(COMBAT_FORM)'),/该区域/);
 combatDefaults.area='Dungeon/HobgolbinCamp';
-assert.equal(run('readCombatSimulation(COMBAT_FORM).dungeon'),true);
+assert.equal(run('readCombatSimulation(COMBAT_FORM).enemy.key'),'Enemy/Golbin');
+assert.doesNotMatch(combatPageHtml,/name="(?:hp|lifesteal)"/);
 assert.match(combatPageHtml,/<h2>战斗模拟器<\/h2>[^]*?name="seconds"[^]*?name="evasion-Stab"[^]*?name="power-Normal"[^]*?name="protection-Normal"/);
 assert.deepEqual([...combatPageHtml.matchAll(/<fieldset class="calcform combat-stat-card"><legend>([^<]+)<\/legend>/g)].map(m=>m[1]),
- ['进攻属性','躲避值','战力与防护','生命与护甲']);
+ ['进攻属性','躲避值','战力与防护','护盾与护甲']);
 assert.match(combatPageHtml,/<h3>战斗属性<\/h3>[^]*?<label><span>攻击间隔（秒）<\/span><input[^>]+name="interval"/);
 assertPlayerPage();
 assert.equal(run('combatKernel.hitChance(300,600)'),.25);
@@ -230,7 +231,7 @@ assert.equal(run('combatKernel.damage(0,1,0,0,0)'),0);
 assert.equal(run('combatKernel.ticks(2400)'),144);
 assert.throws(()=>run('combatNumber("",1,1000,true,"模拟时长")'),/模拟时长/);
 const combatFixture=`({
- player:{hp:10,ward:0,armour:0,interval:1000,crit:0,lifesteal:0},
+ player:{ward:0,armour:0,interval:1000,crit:0},
  profiles:[{hp:1,ward:0,armour:0,interval:120,lifesteal:0,playerMin:1,playerMax:1,playerHit:1,playerFactor:1,enemyHit:1,
   attacks:[{factor:1,avoidable:true,hits:[{damage:[[0,10,10]],wait:1}]}]}],
  seconds:8,spawnSeconds:3,samples:32,seed:0
@@ -241,23 +242,28 @@ const combatRun=overrides=>JSON.parse(run(`(()=>{
  while(!job.step(1)){}
  return JSON.stringify(job.summary());
 })()`));
-assert.deepEqual(combatRun('').kills,{mean:2,margin:0});
-assert.equal(combatRun('input.seconds=3.99;').kills.mean,0);
-const simultaneous=combatRun('input.profiles[0].interval=60;');
-assert.equal(simultaneous.kills.mean,0);
-assert.equal(simultaneous.damage.mean,10);
-assert.equal(simultaneous.deathRate,1);
-assert.equal(combatRun('input.profiles[0].interval=60; input.player.hp=30;').damage.mean,20);
-assert.equal(combatRun('input.profiles[0].playerHit=0; input.seconds=4;').kills.mean,0);
-const multiHit=combatRun('input.seconds=5.3; input.player.hp=100; input.player.interval=60000; input.profiles[0].interval=60; input.profiles[0].attacks[0].hits.push({damage:[[0,5,5]],wait:16});');
+assert.deepEqual(combatRun('').damage,{mean:0,margin:0});
+const simultaneous='input.profiles[0].interval=60;';
+assert.equal(combatRun(simultaneous+'input.seconds=3.99;').damage.mean,0);
+assert.deepEqual(combatRun(simultaneous).damage,{mean:20,margin:0});
+assert.equal(combatRun(simultaneous+'input.profiles[0].playerHit=0;').damage.mean,50);
+assert.equal(combatRun(simultaneous+'input.profiles[0].playerHit=0;input.player.ward=2;input.player.armour=3;').damage.mean,30);
+const multiHit=combatRun('input.seconds=5.3; input.player.interval=60000; input.profiles[0].interval=60; input.profiles[0].attacks[0].hits.push({damage:[[0,5,5]],wait:16});');
 assert.equal(multiHit.damage.mean,25);
-const seeded='input.profiles[0].playerHit=.5; input.player.hp=75;';
+const seeded=simultaneous+'input.profiles[0].playerHit=.5;';
 assert.deepEqual(combatRun(seeded),combatRun(seeded));
 const combatPlayer=`{
  stance:'MelvorBase:Stab',element:'MelvorBase:Neutral',damageType:'MelvorBase:Normal',
- interval:2400,accuracy:750,min:1,max:30,crit:0,critMultiplier:1.5,hp:100,ward:0,armour:0,lifesteal:0,
+ interval:2400,accuracy:750,min:1,max:30,crit:0,critMultiplier:1.5,ward:0,armour:0,
  evasion:{'MelvorBase:Stab':640},power:{'MelvorBase:Normal':63},protection:{'MelvorBase:Normal':0}
 }`;
+const soulrip=run(`compileCombatEnemy({
+ obj:{...byKey.get('Enemy/Golbin').obj,Attacks:[{Attack:'MelvorBase:Soulrip',Chance:1}]}
+},${combatPlayer})`);
+assert.ok(soulrip.limits.some(text=>text.startsWith('按玩家生命值计算的伤害 ')));
+const damageResult=run('combatSimulationResults(byKey.get("Enemy/Golbin"),[],{seconds:8,samples:32,damage:{mean:50,margin:0}})');
+assert.match(damageResult,/总扣血量<\/b> 50 ± 0 HP/);
+assert.doesNotMatch(damageResult,/死亡比例|剩余生命|预计击杀|掉落期望/);
 assert.ok(run(`entries.filter(e=>e.type==='Enemy').every(e=>compileCombatEnemy(e,${combatPlayer}).profiles.every(p=>
  p.hp>0&&p.interval>0&&p.attacks.length&&p.attacks.every(a=>Number.isFinite(a.factor))))`));
 assert.equal(run(`Object.fromEntries(combatDropExpectations({Drops:{
@@ -392,7 +398,7 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
  assert.equal(customSpawn,2.4);
  assert.match(savedCombatHtml,/已按存档中的等级/);
  assert.match(savedCombatHtml,/<option value="MelvorBase:Slash" selected>/);
- for(const [field,value] of Object.entries({interval:2.7,accuracy:840,max:26,hp:100,'power-Normal':56,'evasion-Stab':640})){
+ for(const [field,value] of Object.entries({interval:2.7,accuracy:840,max:26,'power-Normal':56,'evasion-Stab':640})){
   assert.ok(savedCombatHtml.includes('name="'+field+'" value="'+value+'"'),field);
  }
  assert.equal(run('savedCombatFields({...playerSave,equipment:[],combatWeapon:null}).fields.interval'),4);

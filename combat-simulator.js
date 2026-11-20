@@ -18,10 +18,10 @@ function createCombatKernel(){
  }
  function createJob({player,profiles,seconds,spawnSeconds,samples,seed}){
   const end=Math.floor(seconds*tickRate),spawn=ticks(spawnSeconds*1000),playerInterval=ticks(player.interval);
-  let state=seed>>>0,completed=0,events=0,deaths=0;
-  let killSum=0,killSquare=0,hpSum=0,hpSquare=0,remainingSum=0;
-  let hp=player.hp,enemyHp=0,ward=0,enemyWard=0,armour=0,enemyArmour=0;
-  let playerAt=0,enemyAt=0,spawnAt=spawn,profile,attack,hitIndex=0,trialKills=0,trialDamage=0;
+  let state=seed>>>0,completed=0,events=0;
+  let damageSum=0,damageSquare=0;
+  let enemyHp=0,ward=0,enemyWard=0,armour=0,enemyArmour=0;
+  let playerAt=0,enemyAt=0,spawnAt=spawn,profile,attack,hitIndex=0,trialDamage=0;
   function random(){
    state=(state+0x6D2B79F5)|0;
    let n=Math.imul(state^(state>>>15),state|1);
@@ -37,16 +37,13 @@ function createCombatKernel(){
   }
   function finish(){
    completed++;
-   if(!hp)deaths++;
-   killSum+=trialKills;killSquare+=trialKills*trialKills;
-   hpSum+=trialDamage;hpSquare+=trialDamage*trialDamage;remainingSum+=hp;
-   hp=player.hp;trialKills=0;trialDamage=0;spawnAt=spawn;
+   damageSum+=trialDamage;damageSquare+=trialDamage*trialDamage;
+   trialDamage=0;spawnAt=spawn;
   }
   function summary(){
-   const estimate=(sum,square)=>({mean:sum/completed,margin:completed>1?1.96*Math.sqrt(Math.max(0,(square-sum*sum/completed)/(completed-1)/completed)):0});
-   const remaining=remainingSum/completed;
-   return {samples:completed,events,seconds,kills:estimate(killSum,killSquare),damage:estimate(hpSum,hpSquare),
-    deathRate:deaths/completed,remaining,netLoss:player.hp-remaining};
+   const mean=damageSum/completed;
+   const margin=completed>1?1.96*Math.sqrt(Math.max(0,(damageSquare-damageSum*mean)/(completed-1)/completed)):0;
+   return {samples:completed,seconds,damage:{mean,margin}};
   }
   function step(limit){
    while(completed<samples&&limit-->0){
@@ -67,30 +64,27 @@ function createCombatKernel(){
       if(player.crit>0&&random()<player.crit)raw=Math.floor(raw*player.critMultiplier);
       if(raw>0){
        const hit=damage(raw,profile.playerFactor,enemyWard,profile.ward,enemyArmour);
-       const taken=Math.min(enemyHp,hit);
-       enemyHp-=taken;
+       enemyHp=Math.max(0,enemyHp-hit);
        if(enemyWard>0)enemyWard--;
        if(hit>=enemyArmour)enemyArmour=0;
-       if(player.lifesteal>0)hp=Math.min(player.hp,hp+Math.max(1,Math.floor(taken*player.lifesteal)));
       }
      }
     }
-    // The game ticks both actors before processing deaths, with player death resolved first.
+    // Both actors attack on the same tick before processing the enemy's death.
     while(enemyAt===tick){
      const hit=attack.hits[hitIndex];
      if(!attack.avoidable||profile.enemyHit===1||(profile.enemyHit>0&&random()<profile.enemyHit)){
       let raw=0;
       for(let i=0;i<hit.damage.length;i++){
        const part=hit.damage[i],kind=part[0];
-       raw+=kind===0?roll(part[1],part[2]):Math.trunc((kind===1?enemyHp:hp)*part[2]);
+       raw+=kind===0?roll(part[1],part[2]):Math.trunc(enemyHp*part[2]);
       }
       if(raw>0){
        const amount=damage(raw,attack.factor,ward,player.ward,armour);
-       const taken=Math.min(hp,amount);
-       hp-=taken;trialDamage+=taken;
+       trialDamage+=amount;
        if(ward>0)ward--;
        if(amount>=armour)armour=0;
-       if(profile.lifesteal>0&&enemyHp>0)enemyHp=Math.min(profile.hp,enemyHp+Math.max(1,Math.floor(taken*profile.lifesteal)));
+       if(profile.lifesteal>0&&enemyHp>0)enemyHp=Math.min(profile.hp,enemyHp+Math.max(1,Math.floor(amount*profile.lifesteal)));
       }
      }
      hitIndex++;
@@ -98,8 +92,7 @@ function createCombatKernel(){
       enemyAt+=profile.interval;attack=weighted(profile.attacks);hitIndex=0;
      }else enemyAt+=attack.hits[hitIndex].wait-(hitIndex===1?1:0);
     }
-    if(!hp)finish();
-    else if(!enemyHp){trialKills++;spawnAt=tick+spawn;}
+    if(!enemyHp)spawnAt=tick+spawn;
    }
    return completed===samples;
   }
@@ -248,8 +241,7 @@ function savedCombatFields(save){
   accuracy:Math.max(1,Math.floor(combatBaseRating(weightedLevel(style.AccuracyRatingLevels),stat(stance.AccuracyStat))*(1+bonus('PercentAccuracyRating')))),
   min:Math.min(max,Math.max(1,Math.floor(1+bonus('FlatMinHit')+max*bonus('MinHitBasedOnMaxHit')))),max,
   crit:Math.min(100,Math.max(0,bonus('FlatCriticalHitChance')*100)),critMultiplier:Math.max(1,1.5+bonus('FlatCriticalHitMultiplier')),
-  hp:Math.max(1,Math.floor(level(style.MaxHitpointsLevel)*10*(1+bonus('PercentMaxHitpoints'))+bonus('FlatMaxHitpoints'))),
-  ward:Math.max(0,stat(style.MaxWardStat)),armour:Math.max(0,stat(style.ArmourStat)),lifesteal:Math.min(100,Math.max(0,stat(style.LifestealStat)*100))
+  ward:Math.max(0,stat(style.MaxWardStat)),armour:Math.max(0,stat(style.ArmourStat))
  };
  for(const s of G.Objects.AttackStance||[]){
   const scope={CombatStyle:s.CombatStyle,AttackStance:ns+s.Id},defence=get('CombatStyle',s.CombatStyle);
@@ -324,9 +316,10 @@ function compileCombatEnemy(entry,player){
      if(Number.isFinite(percent)){
       if(kind==='NormalDamage'&&Character==='Attacker')return [0,Math.trunc(min*percent),Math.trunc(max*percent)];
       if(kind==='MaxHit'&&Character==='Attacker')return [0,Math.trunc(max*percent),Math.trunc(max*percent)];
-      if(kind==='CurrentHitpoints'&&['Attacker','Target'].includes(Character))return [Character==='Attacker'?1:2,0,percent];
+      if(kind==='CurrentHitpoints'&&Character==='Attacker')return [1,0,percent];
      }
-     limits.add('伤害公式 '+(attackEntry?.title||'（游戏数据未解析）'));
+     const playerHpDamage=(kind==='CurrentHitpoints'||kind==='MaxHitpoints')&&['Defender','Target'].includes(Character);
+     limits.add((playerHpDamage?'按玩家生命值计算的伤害 ':'伤害公式 ')+(attackEntry?.title||'（游戏数据未解析）'));
      return [0,0,0];
     });
     return Array.from({length:hit.Count},()=>({damage:parts,wait:ticks(hit.Interval)}));
@@ -377,7 +370,7 @@ function combatSimulatorPage(){
  const stances=(G.Objects.AttackStance||[]).map(s=>number(titleOf('AttackStance',s.Id),'evasion-'+s.Id,640,1,1000000)).join('');
  const ratings=(G.Objects.DamageType||[]).map(s=>number(titleOf('DamageType',s.Id)+'战力值','power-'+s.Id,63,1,1000000)+
   number(titleOf('DamageType',s.Id)+'防护值','protection-'+s.Id,0,0,1000000)).join('');
- $('detail').innerHTML='<h2>战斗模拟器</h2><p>每次试验从满血开始，击杀后等待重生，玩家死亡时结束。玩家使用普通攻击，可计入面板属性和生命偷取。食物、自动进食、玩家特殊攻击、区域效果、资源消耗和掉落加成超出当前模型范围。</p>'+
+ $('detail').innerHTML='<h2>战斗模拟器</h2><p>每次试验累计完整模拟时长内受到的伤害。玩家使用普通攻击，击杀后等待怪物重生。扣血量已计入躲避、防护、护盾和护甲。</p>'+
   '<form id="combat-sim-form"><section><h3>怪物与模拟时长</h3><div class="combat-setup">'+select('区域','area',areas)+select('怪物','enemy',simulationEnemyOptions(area,selectedEnemy))+
   number('模拟时长（秒）','seconds',60,.1,604800,'any')+number('模拟次数','samples',1024,32,16384)+'</div></section>'+
   '<section><h3>战斗属性</h3><p>'+(saved?'已按存档中的等级、当前装备、姿态、法术和可确认的长期加成估算。可手动调整。祈祷、套装和临时效果未计入。'+
@@ -388,8 +381,7 @@ function combatSimulatorPage(){
   number('精准值','accuracy',750,1,1000000)+number('最低伤害','min',1,1,1000000)+number('最高伤害','max',30,1,1000000)+
   number('暴击几率（%）','crit',0,0,100,'any')+number('暴击倍率','critMultiplier',1.5,1,10,'any'))+
   card('躲避值',stances)+'<div class="combat-stat-side">'+card('战力与防护',ratings)+
-  card('生命与护甲',number('最大生命值','hp',100,1,1000000)+number('护盾','ward',0,0,1000000)+
-  number('护甲','armour',0,0,1000000)+number('生命偷取（%）','lifesteal',0,0,100,'any'))+'</div></div></section>'+
+  card('护盾与护甲',number('护盾','ward',0,0,1000000)+number('护甲','armour',0,0,1000000))+'</div></div></section>'+
   '<p><button type="submit" id="combat-sim-start">开始模拟</button> <button type="button" id="combat-sim-cancel" disabled>取消模拟</button></p></form>'+
   '<p id="combat-sim-status" role="status"></p><div id="combat-sim-result"></div>';
  if(setup)setupNames.forEach((name,i)=>{$('combat-sim-form').elements.namedItem(name).value=setup[i];});
@@ -410,8 +402,7 @@ function readCombatSimulation(form){
   interval:number('interval',.25,60,false,'攻击间隔')*1000,accuracy:number('accuracy',1,1000000,true,'精准值'),
   min:number('min',1,1000000,true,'最低伤害'),max:number('max',1,1000000,true,'最高伤害'),
   crit:number('crit',0,100,false,'暴击几率')/100,critMultiplier:number('critMultiplier',1,10,false,'暴击倍率'),
-  hp:number('hp',1,1000000,true,'最大生命值'),ward:number('ward',0,1000000,true,'护盾'),
-  armour:number('armour',0,1000000,true,'护甲'),lifesteal:number('lifesteal',0,100,false,'生命偷取')/100,
+  ward:number('ward',0,1000000,true,'护盾'),armour:number('armour',0,1000000,true,'护甲'),
   evasion:getRatingRows('AttackStance','evasion-',1),power:getRatingRows('DamageType','power-',1),
   protection:getRatingRows('DamageType','protection-',0)
  };
@@ -419,10 +410,9 @@ function readCombatSimulation(form){
  const area=value('area'),enemy=simulationAreas.get(area)?.find(e=>e.key===value('enemy'));
  if(!enemy)throw new Error('请选择该区域中的怪物。');
  const {profiles,limits}=compileCombatEnemy(enemy,player);
- const dungeon=byKey.get(area)?.type==='Dungeon';
  const input={player,profiles,seconds:number('seconds',.1,604800,false,'模拟时长'),
   spawnSeconds:combatSpawnSeconds(playerSave),samples:number('samples',32,16384,true,'模拟次数'),seed:Date.now()};
- return {enemy,dungeon,limits,input};
+ return {enemy,limits,input};
 }
 
 function runCombatBatches(kernel,input,send,chunkMs){
@@ -451,18 +441,11 @@ function stopCombatSimulation(){
  combatSimulation.stop?.();
  combatSimulation=null;
 }
-function combatSimulationResults(enemy,dungeon,limits,result){
- const estimate=x=>fmt(x.mean)+' ± '+fmt(x.margin);
- const drops=(dungeon?[]:combatDropExpectations(enemy.obj)).map(([key,each])=>{
-  const entry=byKey.get(key),expected=result.kills.mean*each;
-  return [cell(entry?.title||'—',eLink(entry)),cell(each),cell(expected)];
- }).sort((a,b)=>b[2].value-a[2].value);
- const missing=limits.length?'<p class="note">以下机制未计入结果：'+esc(limits.join('、'))+'。它们可能显著改变承伤、击杀数和掉落。</p>':'';
- return '<h3>'+eLink(enemy)+' · 模拟结果</h3>'+missing+
-  '<p><b>累计承伤</b> '+estimate(result.damage)+' HP　 <b>预计击杀</b> '+estimate(result.kills)+'　 <b>模拟死亡比例</b> '+pct(result.deathRate)+'</p>'+
-  '<p>平均净失血 '+fmt(result.netLoss)+' HP，平均剩余生命 '+fmt(result.remaining)+' HP。</p>'+
-  '<p>'+fmt(result.seconds)+' 秒 · '+fmt(result.samples,0)+' 次试验。± 为近似 95% 抽样误差，实际结果还受模型覆盖的机制影响。</p>'+
-  '<h3>基础掉落期望</h3>'+(dungeon?'<p class="muted">地下城击杀没有掉落。此处仅模拟所选怪物的重复交战。</p>':drops.length?dataTable(['掉落','每次击杀期望','所选时长内期望'],drops):'<p class="muted">暂无基础掉落。</p>');
+function combatSimulationResults(enemy,limits,result){
+ const missing=limits.length?'<p class="note">以下机制未计入扣血量：'+esc(limits.join('、'))+'。</p>':'';
+ return '<h3>'+eLink(enemy)+' · 模拟结果</h3>'+
+  '<p><b>总扣血量</b> '+fmt(result.damage.mean)+' ± '+fmt(result.damage.margin)+' HP</p>'+
+  '<p>'+fmt(result.seconds)+' 秒 · '+fmt(result.samples,0)+' 次试验。结果取各次试验的平均值，± 表示近似 95% 抽样误差。</p>'+missing;
 }
 function startCombatSimulation(form){
  const status=$('combat-sim-status'),resultBox=$('combat-sim-result');
@@ -471,7 +454,7 @@ function startCombatSimulation(form){
  let request;
  try{request=readCombatSimulation(form);}
  catch(error){status.textContent=error.message;return;}
- const {enemy,dungeon,limits,input}=request;
+ const {enemy,limits,input}=request;
  const start=$('combat-sim-start'),cancel=$('combat-sim-cancel');
  start.disabled=true;cancel.disabled=false;
  status.textContent='正在模拟 '+enemy.title+'…';
@@ -482,7 +465,7 @@ function startCombatSimulation(form){
   if(message.error||message.result){
    stopCombatSimulation();start.disabled=false;cancel.disabled=true;
    status.textContent=message.error||'模拟完成。';
-   if(message.result)resultBox.innerHTML=combatSimulationResults(enemy,dungeon,limits,message.result);
+   if(message.result)resultBox.innerHTML=combatSimulationResults(enemy,limits,message.result);
   }else status.textContent='已完成 '+fmt(message.completed,0)+' / '+fmt(input.samples,0)+' 次模拟。';
  }
  const fallback=()=>{session.stop=runCombatBatches(combatKernel,input,receive,7);};
