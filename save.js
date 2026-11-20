@@ -126,10 +126,29 @@ function readSaveAstrology(r,save){
 
 // ---------- Player bonuses ----------
 function saveLevel(skill,save){const xp=save.xp[skill];if(!Number.isFinite(xp))return 1;let level=1;while(level<99&&xpForLevel(level+1)<=xp)level++;return level;}
+function savedMasteryTaskComplete(entry,save,done){
+ const ns=G.Namespace+':',o=entry.obj;
+ if(done.has(ns+o.Id))return true;
+ const condition=o.ConditionGoal,data=condition?.Data;
+ if(!data||o.Goal||o.TriggerGoal)return false;
+ const skill=shortId(data.Component?.Entity);
+ switch(shortId(condition.Type)){
+  case 'Level':return Number.isFinite(save.xp[skill])&&saveLevel(skill,save)>=data.Level;
+  case 'PetUnlocked':return (save.pets[skill]||[]).includes(data.Pet);
+  case 'AstrologyMajorNodeUnlockCount':
+  case 'AstrologyMinorNodeUnlockCount':{
+   const nodes=save.astrology[data.Constellation]||[];
+   const constellation=byKey.get('AstrologyConstellation/'+shortId(data.Constellation))?.obj;
+   const group=shortId(condition.Type)==='AstrologyMajorNodeUnlockCount'?'MajorNodes':'MinorNodes';
+   return (constellation?.[group]||[]).filter(node=>nodes.includes(node)).length>=data.Count;
+  }
+  default:return false;
+ }
+}
 function masteryRankKey(skill,save){
  const tasks=configEntries(skill,'MasteryGuildTasks'),ranks=configEntries(skill,'MasteryGuildRanks');if(!ranks.length)return null;
  const done=new Set(save.tasks[skill]||[]),total=masteryTotalPoints(skill);
- const have=tasks.filter(t=>done.has(G.Namespace+':'+t.obj.Id)).reduce((s,t)=>s+(masteryTaskCategory(t)?.obj.BasePoints||0),0);
+ const have=tasks.filter(t=>savedMasteryTaskComplete(t,save,done)).reduce((s,t)=>s+(masteryTaskCategory(t)?.obj.BasePoints||0),0);
  let rank=0;for(let i=1;i<ranks.length&&have>=Math.ceil(total*ranks[i].obj.PointPercentRequired);i++)rank=i;
  return {rank:ranks[rank],index:rank,have,total};
 }
@@ -146,8 +165,9 @@ function playerSources(save){
  }
  for(const pets of Object.values(save.pets))for(const p of pets)add('Pet/'+shortId(p),1,'宠物');
  for(const s of skillEntries){const m=masteryRankKey(s.id,save);if(!m)continue;
-  for(const b of configEntries(s.id,'MasteryGuildBonuses')){const need=(b.obj.Requirements||[]).map(q=>q.Data?.Rank).filter(Boolean);
-   if(need.length&&need.every(id=>configEntries(s.id,'MasteryGuildRanks').findIndex(r=>G.Namespace+':'+r.obj.Id===id)<=m.index))add(b.key,1,'精通公会');}
+  const reached=new Set(configEntries(s.id,'MasteryGuildRanks').slice(0,m.index+1).map(r=>G.Namespace+':'+r.obj.Id));
+  for(const b of configEntries(s.id,'MasteryGuildBonuses')){const need=b.obj.Requirements||[];
+   if(need.length&&need.every(r=>shortId(r.Type)==='MasteryGuildRank'&&reached.has(r.Data?.Rank)))add(b.key,1,'精通公会');}
  }
  return owned;
 }
@@ -166,7 +186,7 @@ function playerBoosts(save){
 
 // Does a bonus apply to this recipe? Every non-null local-context field must match the recipe.
 function boostAppliesTo(m,skill,e){
- if(m.StatGroup)return m.StatGroup==='GlobalPercentActionInterval';
+ if(m.StatGroup)return m.StatGroup==='GlobalPercentActionInterval'||m.StatGroup==='GlobalFlatActionInterval';
  const ctx=m.LocalContext||{},o=e.obj,id=G.Namespace+':'+o.Id;
  if(shortId(ctx.Component?.Entity)!==skill)return false;
  for(const [k,v] of Object.entries(ctx)){
@@ -175,6 +195,7 @@ function boostAppliesTo(m,skill,e){
   else if(k==='Category'){if(v!==o.Category)return false;}
   else if(k==='Subcategory'){if(v!==o.Subcategory)return false;}
   else if(k==='Location'){if(v!==o.Location)return false;}
+  else if(k==='RecipeType'){if(e.type!=='ThievingRecipe'||v!==o.RecipeType)return false;}
   else return false;// item / currency / effect specific bonuses are not part of the base recipe numbers
  }
  return true;
@@ -183,13 +204,19 @@ const recipeSkillTypes={WoodcuttingRecipe:'Woodcutting',MiningRecipe:'Mining',Fi
 function recipeSkill(e){return recipeSkillTypes[e.type]||skillOfEntry(e);}
 // Interval-type stats per recipe phase: fishing has min / max, herblore has one per step.
 const intervalStats={PercentInterval:'all',GlobalPercentActionInterval:'all',PercentMinInterval:'min',PercentMaxInterval:'max',PercentPreparingInterval:'BasePreparingInterval',PercentHeatingInterval:'BaseHeatingInterval',PercentStirringInterval:'BaseStirringInterval',PercentBottlingInterval:'BaseBottlingInterval'};
-const flatIntervalStats={FlatInterval:'all',FlatMinInterval:'min',FlatMaxInterval:'max'};
+const flatIntervalStats={FlatInterval:'all',GlobalFlatActionInterval:'all',FlatMinInterval:'min',FlatMaxInterval:'max'};
+const thievingStatsKeys=['FlatStealth','PercentStealth','FlatPerception','PercentPerception','FlatFortune','FlatFortuneUnderSuccess',
+ 'PercentCommonLootChance','PercentRareLootChance','PercentCurrencyLootChance','PercentCurrencyReward','FlatCurrencyReward',
+ 'StunAvoidanceChance','PercentStunInterval','FlatStunInterval','FlatStages','SkipStageChance'];
 function boostTotals(save,skill,e){
  const t={xp:0,percent:{},flat:{},doubling:0,quantity:0,percentQuantity:0,applied:[]};
+ if(e.type==='ThievingRecipe')t.thieving=Object.fromEntries(thievingStatsKeys.map(key=>[key,0]));
  for(const r of playerBoostsCache(save)){
   if(!boostAppliesTo(r.m,skill,e))continue;
   const stat=r.m.StatGroup||r.m.Stat.Name,type=r.m.StatGroup?'':shortId(r.m.Stat.StatsType);
-  const scale=r.m.Scaling?.Data?.Experience?saveLevel(shortId(r.m.Scaling.Data.Experience.Entity),save):1,v=r.m.Value*scale*r.times;
+  const experience=r.m.Scaling?.Data?.Experience;
+  if(r.m.Scaling&&!experience)continue;
+  const v=r.m.Value*r.times*(experience?saveLevel(shortId(experience.Entity),save):1);
   let used=true;
   if(type==='Experience'&&stat==='PercentXPGained')t.xp+=v;
   else if(intervalStats[stat])t.percent[intervalStats[stat]]=(t.percent[intervalStats[stat]]||0)+v;
@@ -197,6 +224,7 @@ function boostTotals(save,skill,e){
   else if(stat==='DoublingChance')t.doubling+=v;
   else if(stat==='FlatProductQuantity')t.quantity+=v;
   else if(stat==='PercentProductQuantity')t.percentQuantity+=v;
+  else if(t.thieving&&type==='ThievingAction'&&thievingStatsKeys.includes(stat))t.thieving[stat]+=v;
   else used=false;
   if(used)t.applied.push(r);
  }
@@ -243,13 +271,49 @@ function savedRecipeTime(e,t){
  if(e.type==='ArtisanRecipe')return at(o.BaseInterval)*Math.max(1,o.Steps);
  const base=recipeTime(e);return base?at(base):base;
 }
+function savedThievingStats(e,save,t,xp){
+ const o=e.obj,bonus=t.thieving,level=saveLevel('Thieving',save);
+ const scale=(base,flat=0,percent=0)=>Math.max(0,Math.floor((base+flat)*(1+percent)));
+ const probability=p=>Math.min(1,Math.max(0,p));
+ const stealth=scale(level,bonus.FlatStealth,bonus.PercentStealth),perception=scale(o.Perception,bonus.FlatPerception,bonus.PercentPerception);
+ const successChance=probability((100+stealth)/(100+perception));
+ const interval=scaledInterval(e,o.BaseInterval,t.percent.all,t.flat.all);
+ // A failed pickpocket retries the same stage after any stun (2 s base).
+ const stunMs=scale(2000,bonus.FlatStunInterval,bonus.PercentStunInterval);
+ const timerMs=ms=>ms===0?0:combatKernel.ticks(ms)*1000/60;
+ const ms=(timerMs(interval)+(1-successChance)*(1-probability(bonus.StunAvoidanceChance))*timerMs(stunMs))/successChance;
+ const skip=probability(bonus.SkipStageChance),stages=Math.max(1,o.Stages+Math.trunc(bonus.FlatStages));
+ let previous=0,rolls=1;
+ for(let stage=2;stage<=stages;stage++)[previous,rolls]=[rolls,1+(1-skip)*rolls+skip*previous];
+ const fortune=bonus.FlatFortune+(successChance<1?bonus.FlatFortuneUnderSuccess:0);
+ const double=1+probability(t.doubling);
+ const itemValue=(rows,chance)=>{
+  const weight=(rows||[]).reduce((n,r)=>n+r.Weight,0);
+  if(!weight||!chance)return 0;
+  return rows.reduce((value,r)=>{
+   const min=r.MinQuantity??r.Quantity,max=r.MaxQuantity??r.Quantity;
+   let total=0;
+   for(let quantity=min;quantity<=max;quantity++)total+=Math.floor(quantity*(1+fortune/100));
+   return value+r.Weight/weight*total/(max-min+1)*(itemEntry(r.Item)?.obj.SellsFor?.Quantity||0);
+  },0)*chance*double;
+ };
+ const loot=itemValue(o.CommonDropTable,probability(o.BaseCommonLootChance*(1+bonus.PercentCommonLootChance)))+
+  itemValue(o.RareDropTable,probability(o.BaseRareLootChance*(1+bonus.PercentRareLootChance)))+itemValue(o.CompletionDropTable,1)/rolls;
+ const c=o.CurrencyReward;
+ const gold=c&&shortId(c.Currency)==='GoldPieces'?probability(o.BaseCurrencyLootChance*(1+bonus.PercentCurrencyLootChance))*
+  (scale(c.MinQuantity??c.Quantity,bonus.FlatCurrencyReward,bonus.PercentCurrencyReward)+scale(c.MaxQuantity??c.Quantity,bonus.FlatCurrencyReward,bonus.PercentCurrencyReward))/2:0;
+ return {xp,ms,xpMs:ms*rolls,value:gold+loot,successChance,applied:t.applied};
+}
+
 // Recipe numbers with the player's bonuses; with no save they equal the base columns.
 function savedRecipeStats(e,save){
- const skill=recipeSkill(e),xp=e.obj.BaseExperience;
- if(!save||!skill)return {xp,ms:recipeTime(e),value:recipeValue(e),applied:[]};
- const t=boostTotals(save,skill,e),double=1+Math.min(1,Math.max(0,t.doubling));
+ const skill=recipeSkill(e),baseXp=e.obj.BaseExperience;
+ if(!save||!skill)return {xp:baseXp,ms:recipeTime(e),value:recipeValue(e),applied:[]};
+ const t=boostTotals(save,skill,e),xp=baseXp==null?baseXp:baseXp*(1+t.xp);
+ if(t.thieving)return savedThievingStats(e,save,t,xp);
+ const double=1+Math.min(1,Math.max(0,t.doubling));
  const value=(recipeValue(e)*(1+t.percentQuantity)+t.quantity*primaryValue(e))*double;
- return {xp:xp==null?xp:xp*(1+t.xp),ms:recipeTime(e)?savedRecipeTime(e,t):null,value,applied:t.applied};
+ return {xp,ms:recipeTime(e)?savedRecipeTime(e,t):null,value,applied:t.applied};
 }
 
 function huntingJournalLevel(xp){

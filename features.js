@@ -108,7 +108,8 @@ function contextText(m,path){
 function effectText(m){
  if(m.Modifier){const mod=m.Modifier,id=mod.Effect.Data?.Effect,e=resolve(id||'','Effect')[0],trigger=shortId(mod.Trigger.Type),mode=mod.Trigger.Data?.Type;return (tr(mode||trigger)||mode||trigger)+' · '+pct(m.Chance)+' · '+(mod.AppliesTo==='Self'?'自身':'目标')+'获得'+(e?.title||tr(shortId(mod.Effect.Type)));}
  const template=findTemplate(m);
- const effect=template?plain(tr(template)).replace(/\{Value[^{}]*\}/g,t=>valueText(m,t)).replace(/\{((?:LocalContext|FromContext)\.[^{}]+)\}/g,(_,p)=>contextText(m,p)||'指定目标'):humanWord(statName(m))+' '+signed(m.Value);
+ const localized=plain(tr(template||'')).replace(/\{Value:0(?:\.#+)?%\}\s*\{Value:cond:<0\?Decreased\|>=0\?Increased\}|\{Value:cond:<0\?Decreased\|>=0\?Increased\}\s*\{Value:0(?:\.#+)?%\}/g,'{Value:+0%}');
+ const effect=template?localized.replace(/\{Value[^{}]*\}/g,t=>valueText(m,t)).replace(/\{((?:LocalContext|FromContext)\.[^{}]+)\}/g,(_,p)=>contextText(m,p)||'指定目标'):humanWord(statName(m))+' '+signed(m.Value);
  return m.Scaling?.Data?.Experience?'每级'+skillName(shortId(m.Scaling.Data.Experience.Entity))+'：'+effect:effect;
 }
 function boostValue(m){if(m.Modifier)return pct(m.Chance)+' 触发';const t=findTemplate(m)||'';return (/\{Value[^{}]*%/.test(t)?signed(m.Value*100)+'%':(/\{Value[^{}]*(?:intervaltime|numbertime)/.test(t)?signed(m.Value/1000)+' 秒':signed(m.Value)))+(m.Scaling?' / 级':'');}
@@ -248,11 +249,12 @@ const savedRecipeHeaders=['目标 / 配方','解锁条件','XP（存档）','周
 const recipeValueNote='单次产物期望价值按基础概率和出售价格估算，扒窃按每次成功计。每小时价值按基础周期折算。未计翻倍、保留、加成和材料成本。';
 // With a loaded save, XP / cycle / value use the player's bonuses (savedRecipeStats); otherwise base values.
 function recipeRows(list,save=null){return list.map(e=>{
- const {xp,ms,value}=save?savedRecipeStats(e,save):{xp:e.obj.BaseExperience,ms:recipeTime(e),value:recipeValue(e)};
- const hourly=ms>0?value*3600000/ms:null;
+ const {xp,ms,value,successChance,xpMs=ms}=save?savedRecipeStats(e,save):{xp:e.obj.BaseExperience,ms:recipeTime(e),value:recipeValue(e)};
+ const hourly=ms>0?value*3600000/ms:null,xpHourly=xpMs>0&&xp?xp*3600000/xpMs:null;
  const outputs=sourceRows.filter(r=>r.entry===e&&/主要|产出|完成配方/.test(r.basis));
  return [cell(e.title,eLink(e)+'<small class="en">'+esc(e.en)+'</small>'),cell(levelOf(e.obj),gateText(e)),
-  cell(xp??'',fmt(xp)),cell(ms??'',ms?fmt(ms/1000)+' 秒':'见详情'),cell(ms&&xp?xp*3600000/ms:'',ms&&xp?fmt(xp*3600000/ms):'—'),
+  ...(successChance===undefined?[]:[cell(successChance,pct(successChance))]),
+  cell(xp??'',fmt(xp)),cell(ms??'',ms?fmt(ms/1000)+' 秒':'见详情'),cell(xpHourly??'',fmt(xpHourly)),
   cell('',outputs.map(r=>refLink(r.item,'Item')+' × '+quantity(r)).join('<br>')),
   cell(value,value?fmt(value)+' 金币':'—'),cell(hourly??'',hourly?fmt(hourly)+' 金币/小时':'—'),
   cell('',e.obj.Ingredients?render(e.obj.Ingredients):'—')];
@@ -267,7 +269,7 @@ function rankRewards(bonuses,rankId){
  }).join('')||'<span class="muted">—</span>';
 }
 function masteryTotalPoints(skill){
- return configEntries(skill,'MasteryGuildTasks').reduce((total,e)=>total+masteryTaskCategory(e)?.obj.BasePoints,0);
+ return configEntries(skill,'MasteryGuildTasks').reduce((total,e)=>total+(masteryTaskCategory(e)?.obj.BasePoints??0),0);
 }
 const masteryRankPoints=(rank,total)=>Math.ceil(total*(rank.obj.PointPercentRequired??NaN));
 function masteryRankTable(ranks,skill,id){
@@ -307,19 +309,27 @@ function skillSections(list,skillOf,renderPart,{tag='h3',other='其他'}={}){
 function recipeSection(skill,recipes){
  const head='<h3>配方与等级解锁</h3>';
  if(!playerSave)return head+'<p class="muted">基础周期：伐木按生命值次命中、工匠按步骤计时；钓鱼使用平均间隔。未计加成、失败、额外等待与银行满等中断。基础 XP/h 是该假设下的参考值。'+recipeValueNote+' 在页面顶部导入存档后，本表按你的加成重新计算。</p>'+dataTable(recipeHeaders,recipeRows(recipes),'recipes');
- return head+savedBoostSummary(skill,recipes)+dataTable(savedRecipeHeaders,recipeRows(recipes,playerSave),'recipes');
+ const headers=skill==='Thieving'?[...savedRecipeHeaders.slice(0,2),'单次成功率（存档）',...savedRecipeHeaders.slice(2)]:savedRecipeHeaders;
+ return head+savedBoostSummary(skill,recipes)+dataTable(headers,recipeRows(recipes,playerSave),'recipes');
 }
-// Which save bonuses changed this skill's recipe numbers, grouped by source.
 function savedBoostSummary(skill,recipes){
- const used=new Map();
- for(const e of recipes)for(const r of savedRecipeStats(e,playerSave).applied)used.set(r.key+'#'+r.path,r);
- const level=saveLevel(skill,playerSave),rows=[...used.values()];
- const list=rows.length?'<ul class="save-boosts">'+rows.map(r=>{const e=byKey.get(r.key);return '<li>'+esc(effectText(r.m))+(r.times>1?' × '+r.times:'')+' · '+eLink(e)+' <small>'+esc(r.label)+'</small></li>';}).join('')+'</ul>':'<p class="muted">存档中没有影响本表的长期加成。</p>';
- return '<div class="note save-note"><p><b>已按存档“'+esc(playerSave.character)+'”计算</b>（'+esc(skillName(skill))+' 等级 '+level+'）。计入工具腰带、商店升级、占星节点、宠物与精通公会阶级奖励中无附加条件的经验、间隔、翻倍与产物数量加成；药水、装备套装、事件、战斗效果、保留与材料成本不计。单次产物期望价值按出售价格估算，扒窃按每次成功计。每小时价值按存档周期折算。</p><p><b>本表使用的加成（'+rows.length+'）</b></p>'+list+'</div>';
+ const key=r=>r.key+'#'+r.path,used=new Map();
+ for(const e of recipes)for(const r of savedRecipeStats(e,playerSave).applied)used.set(key(r),r);
+ const other=playerBoostsCache(playerSave).filter(r=>r.skills.includes(skill)&&!used.has(key(r))&&(recipes.length||!r.m.StatGroup||skill==='Hunting'));
+ if(!recipes.length&&!other.length)return '';
+ const list=rows=>'<ul class="save-boosts">'+rows.map(r=>'<li>'+esc(effectText(r.m))+(r.times>1?' × '+r.times:'')+' · '+
+  eLink(byKey.get(r.key))+' <small>'+esc(r.label)+'</small></li>').join('')+'</ul>';
+ const caption='<p><b>'+(recipes.length?'已按存档“'+esc(playerSave.character)+'”计算':'存档“'+esc(playerSave.character)+'”')+'</b>（'+esc(skillName(skill))+' 等级 '+fmt(saveLevel(skill,playerSave),0)+'）。';
+ if(!recipes.length)return '<div class="note save-note">'+caption+'已识别的长期加成（'+other.length+' 项）。各表注明计算范围。</p>'+list(other)+'</div>';
+ const notes=skill==='Thieving'?'周期按连续扒窃直到一次成功计算，包含失败及眩晕等待。收益按每次成功计，完成战利品按所需步骤摊入，经验按目标完成计。未计同区额外扒窃、劫案条件奖励、死亡和其他中断。':
+  '单次产物期望价值按出售价格估算，每小时价值按存档周期折算。';
+ return '<div class="note save-note">'+caption+notes+'药水、装备套装、临时效果和材料成本未计入。</p><p><b>本表使用的加成（'+used.size+'）</b></p>'+
+  (used.size?list([...used.values()]):'<p class="muted">存档中没有影响本表的长期加成。</p>')+
+  (other.length?'<details><summary>已识别、未计入本表的加成（'+other.length+'）</summary>'+list(other)+'</details>':'')+'</div>';
 }
 const saveProgressOptions={
  MasteryGuildTask:{label:'隐藏已完成的任务',note:'仅隐藏可从存档确认完成的任务。',empty:'当前筛选下没有剩余精通任务。',done:save=>{
-  const tasks=new Set(Object.values(save.tasks||{}).flat());return e=>tasks.has(G.Namespace+':'+e.obj.Id);
+  const tasks=new Set(Object.values(save.tasks||{}).flat());return e=>savedMasteryTaskComplete(e,save,tasks);
  }},
  ShopPurchase:{label:'隐藏已购买的一次性条目',empty:'当前筛选下没有剩余商店条目。',done:save=>e=>e.obj.DefaultBuyLimit===1&&save.shop?.[G.Namespace+':'+e.obj.Id]>0}
 };
@@ -369,7 +379,7 @@ function showSkill(id){
   const body=field==='MasteryGuildTasks'?saveProgressList('MasteryGuildTask',list,part=>dataTable(masteryTaskHeaders,skillDetailRows(part))):dataTable(skillDetailHeaders,skillDetailRows(list));
   return '<section><h3>'+esc(title)+' · '+list.length+'</h3>'+body+'</section>';
  }).join('');
- $('detail').innerHTML='<div class="breadcrumb">'+pageLink('@skills','技能总览')+'</div><h2>'+icon(s.entry,42)+esc(s.title)+'</h2><p>'+esc(s.entry.en)+' · '+boostLink(id)+' · '+pageLink('@guides','训练与解锁指南')+'</p><div class="note"><b>查看本技能的全部加成来源：</b> '+boostLink(id)+'。经验、间隔、翻倍、保留、收益和特殊效果均可按来源筛选。</div><h3>技能解锁条件</h3>'+gateText(s.entry)+(recipes.length?recipeSection(id,recipes):'')+sections;
+ $('detail').innerHTML='<div class="breadcrumb">'+pageLink('@skills','技能总览')+'</div><h2>'+icon(s.entry,42)+esc(s.title)+'</h2><p>'+esc(s.entry.en)+' · '+boostLink(id)+' · '+pageLink('@guides','训练与解锁指南')+'</p><div class="note"><b>查看本技能的全部加成来源：</b> '+boostLink(id)+'。经验、间隔、翻倍、保留、收益和特殊效果均可按来源筛选。</div><h3>技能解锁条件</h3>'+gateText(s.entry)+(recipes.length?recipeSection(id,recipes):playerSave?savedBoostSummary(id,recipes):'')+sections;
  $('detail').scrollTop=0;
 }
 function relatedTable(e,kind){const id=G.Namespace+':'+e.obj.Id,opts={tag:'h4'};

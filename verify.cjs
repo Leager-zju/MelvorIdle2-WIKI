@@ -459,6 +459,36 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
  assert.ok(used.includes('ShopPurchase/WoodenAxeHandle')&&used.includes('AstrologyNode/DeedreeA1'),used.join());
  assert.ok(stats.xp>base.xp&&stats.value>base.value,'owned XP / doubling bonuses raise the numbers');
  assert.ok(stats.applied.every(r=>!r.m.Condition&&!r.m.FromContext),'conditional bonuses are excluded');
+ if(referenceSnapshot){
+  run(`var fixtureSave=playerSave;playerSave={
+   ...fixtureSave,xp:{...fixtureSave.xp,Thieving:xpForLevel(70)},
+   toolbelt:{...fixtureSave.toolbelt,Thieving:Object.fromEntries(['BanditGloves','ThugArmband','Balaclava'].map(id=>[id,{item:'MelvorBase:'+id,qty:1}]))},
+   tasks:{...fixtureSave.tasks,Thieving:[1,2,3,4,5,6,14,15,16,17,18,19,20,21,22,23].map(n=>'MelvorBase:ThievingTask'+n)},
+   shop:{...fixtureSave.shop,'MelvorBase:NarrowGetAway':1}
+  };`);
+  assert.equal(run('masteryRankKey("Thieving",playerSave).have'),55);
+  assert.equal(run('masteryRankKey("Thieving",playerSave).rank.obj.Id'),'JourneymanThief');
+  assert.equal(run('savedMasteryTaskComplete(byKey.get("MasteryGuildTask/ThievingTask10"),playerSave,new Set())'),false);
+  assert.equal(run('savedMasteryTaskComplete(byKey.get("MasteryGuildTask/ThievingTask13"),{...playerSave,pets:{Thieving:["MelvorBase:Clive"]}},new Set())'),true);
+  assert.equal(run('savedMasteryTaskComplete(byKey.get("MasteryGuildTask/AstrologyTask23"),{...playerSave,astrology:{"MelvorBase:Deedree":byKey.get("AstrologyConstellation/Deedree").obj.MinorNodes.slice(0,2)}},new Set())'),true);
+  const thieving=run('savedRecipeStats(byKey.get("ThievingRecipe/Citizen"),playerSave)');
+  assert.equal(thieving.successChance,1);assert.equal(thieving.ms,3000);
+  assert.ok(Math.abs(thieving.value-(.85*7.5+1.03*(.105*2+.045*5+1.45*(.0001+.0099*178))))<1e-9);
+  for(const [key,n] of [['Item/BanditGloves',3],['Item/ThugArmband',3],['Item/Balaclava',1],['ShopPurchase/NarrowGetAway',2],
+   ['MasteryGuildBonus/ThievingRank2',1],['MasteryGuildBonus/ThievingRank3',1]]){
+   assert.equal(thieving.applied.filter(r=>r.key===key).length,n,key);
+  }
+  const tough=run('savedRecipeStats({...byKey.get("ThievingRecipe/Citizen"),obj:{...byKey.get("ThievingRecipe/Citizen").obj,Perception:300,Stages:3}},playerSave)');
+  const success=275/409;
+  assert.equal(tough.successChance,success);
+  assert.ok(Math.abs(tough.ms-(3000+(1-success)*.95*2000)/success)<1e-9);
+  assert.equal(tough.xpMs,3*tough.ms);
+  run('showSkill("Thieving")');assert.match(element('detail').innerHTML,/单次成功率（存档）/);
+  assert.match(element('detail').innerHTML,/\+15%扒窃的稀有战利品掉落几率/);assertPlayerPage();
+  run('playerSave={...fixtureSave,toolbelt:{...fixtureSave.toolbelt,Woodcutting:{Gloves:{item:"MelvorBase:WoodcuttersGloves",qty:1}}}};showSkill("Woodcutting")');
+  assert.match(element('detail').innerHTML,/已识别、未计入本表的加成[^]*?Item%2FWoodcuttersGloves/);assertPlayerPage();
+  run('playerSave=fixtureSave');
+ }
  // Interval formulas follow each skill's game code: flat before percent (fishing), after percent (artisan).
  assert.equal(run('scaledInterval(byKey.get("FishingRecipe/ShallowPools"),8000,-0.02,-6000)'),1960);
  assert.equal(run('scaledInterval(byKey.get("ArtisanRecipe/StoneSword"),2000,-0.02,-100)'),1860);
