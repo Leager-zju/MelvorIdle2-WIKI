@@ -214,6 +214,7 @@ const beforeSeed=Date.now(),request=run('readCombatSimulation(COMBAT_FORM)');
 assert.ok(request.input.seed>=beforeSeed&&request.input.seed<=Date.now());
 assert.equal(request.input.seconds,3600);
 assert.equal(request.input.spawnSeconds,3);
+assert.equal(request.lootBonus,null);
 combatDefaults.area='CombatArea/SlimeForest';
 assert.throws(()=>run('readCombatSimulation(COMBAT_FORM)'),/该区域/);
 combatDefaults.area='Dungeon/HobgolbinCamp';
@@ -231,6 +232,18 @@ assert.equal(run('combatKernel.damage(40,.5,2,4,3)'),7);
 assert.equal(run('combatKernel.damage(0,1,0,0,0)'),0);
 assert.equal(run('combatKernel.ticks(2400)'),144);
 assert.throws(()=>run('combatNumber("",1,1000,true,"模拟时长")'),/模拟时长/);
+if(referenceSnapshot){
+ const results=(dungeon,kills)=>run(`combatSimulationResults(byKey.get("Enemy/Golbin"),${dungeon},[],{
+  damage:{mean:0,margin:0},kills:{mean:${kills},margin:0},seconds:60,samples:32
+ },null,null)`);
+ const gold=run('fmt(2.5*(25+2+119/23))');
+ assert.ok(results(false,2.5).includes('掉落物期望总价值</b> '+gold+' 金币'));
+ assert.match(results(false,2.5),/Currency%2FGoldPieces[^]*?<td data-value="25">25<\/td><td data-value="62.5">62.5<\/td>/);
+ assert.match(results(false,0),/掉落物期望总价值<\/b> 0 金币/);
+ const dungeon=results(true,2.5);
+ assert.match(dungeon,/掉落物期望总价值<\/b> 0 金币[^]*?通关奖励单独结算/);
+ assert.doesNotMatch(dungeon,/Currency%2FGoldPieces/);
+}
 const combatFixture=`({
  player:{ward:0,armour:0,interval:1000,crit:0},
  profiles:[{hp:1,ward:0,armour:0,interval:120,lifesteal:0,playerMin:1,playerMax:1,playerHit:1,playerFactor:1,enemyHit:1,
@@ -278,7 +291,7 @@ const soulrip=run(`compileCombatEnemy({
 },${combatPlayer})`);
 assert.ok(soulrip.limits.some(text=>text.startsWith('按玩家生命值计算的伤害 ')));
 const resultMarkup=dungeon=>run('combatSimulationResults(byKey.get("Enemy/Golbin"),'+dungeon+',[],{seconds:8,samples:32,damage:{mean:20,margin:0},kills:{mean:2,margin:0}})');
-assert.match(resultMarkup(false),/总扣血量<\/b> 20 ± 0 HP[^]*预计击杀<\/b> 2 ± 0[^]*基础掉落期望[^]*Item%2FStoneSword/);
+assert.match(resultMarkup(false),/总扣血量<\/b> 20 ± 0 HP[^]*预计击杀<\/b> 2 ± 0[^]*掉落物期望总价值[^]*Item%2FStoneSword/);
 assert.doesNotMatch(resultMarkup(false),/死亡比例|剩余生命/);
 assert.match(resultMarkup(true),/地下城击杀没有掉落/);
 assert.doesNotMatch(resultMarkup(true),/Item%2FStoneSword/);
@@ -485,6 +498,15 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
   const loot=JSON.parse(run('JSON.stringify(savedCombatLoot(playerSave))'));
   assert.deepEqual(loot,{ItemDoublingChance:.03,BuriableDoublingChance:.08,CurrencyDoublingChance:.1});
   const expected=25*1.1+2*1.03*1.08+119/23*1.03;
+  combatDefaults.area='CombatArea/GolbinForest';
+  const savedResult=run(`(()=>{
+   const {enemy,dungeon,areaEffect,limits,lootBonus}=readCombatSimulation(COMBAT_FORM);
+   return combatSimulationResults(enemy,dungeon,limits,{
+    damage:{mean:0,margin:0},kills:{mean:2.5,margin:0},seconds:60,samples:32
+   },areaEffect,lootBonus);
+  })()`);
+  assert.ok(savedResult.includes('掉落物期望总价值</b> '+run('fmt('+2.5*expected+')')+' 金币'));
+  assert.match(savedResult,/Currency%2FGoldPieces[^]*?<td[^>]*>27.5<\/td><td[^>]*>68.75<\/td>/);
   assert.ok(Math.abs(run('combatDropValue(combatDropExpectations(byKey.get("Enemy/Golbin").obj,savedCombatLoot(playerSave)))')-expected)<1e-12);
   assert.equal(run('savedCombatLoot({...playerSave,equipment:[],toolbelt:{Combat:{CombatUtility:{item:"MelvorBase:SlayerChallengeContract",qty:1}}}}).ItemDoublingChance'),0);
   run('routePage("@table/Enemy")');

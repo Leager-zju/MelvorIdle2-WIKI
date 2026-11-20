@@ -677,7 +677,7 @@ function readCombatSimulation(form){
  const {profiles,limits,areaEffect}=compileCombatEnemy(enemy,player,byKey.get(area),playerSave);
  const input={player,profiles,seconds:number('seconds',.1,604800,false,'模拟时长'),
   spawnSeconds:combatSpawnSeconds(playerSave),samples:number('samples',32,16384,true,'模拟次数'),seed:Date.now()};
- return {enemy,dungeon:byKey.get(area)?.type==='Dungeon',areaEffect,limits,input};
+ return {enemy,dungeon:byKey.get(area)?.type==='Dungeon',areaEffect,limits,lootBonus:playerSave?savedCombatLoot(playerSave):null,input};
 }
 
 function runCombatBatches(kernel,input,send,chunkMs){
@@ -706,9 +706,11 @@ function stopCombatSimulation(){
  combatSimulation.stop?.();
  combatSimulation=null;
 }
-function combatSimulationResults(enemy,dungeon,limits,result,areaEffect){
+function combatSimulationResults(enemy,dungeon,limits,result,areaEffect,lootBonus){
  const estimate=x=>fmt(x.mean)+' ± '+fmt(x.margin);
- const drops=(dungeon?[]:combatDropExpectations(enemy.obj)).map(([key,each])=>{
+ const expectedDrops=dungeon?[]:combatDropExpectations(enemy.obj,lootBonus??undefined);
+ const lootValue=result.kills.mean*combatDropValue(expectedDrops);
+ const drops=expectedDrops.map(([key,each])=>{
   const entry=byKey.get(key),expected=result.kills.mean*each;
   return [cell(entry?.title||'—',eLink(entry)),cell(each),cell(expected)];
  }).sort((a,b)=>b[2].value-a[2].value);
@@ -717,8 +719,11 @@ function combatSimulationResults(enemy,dungeon,limits,result,areaEffect){
  return '<h3>'+eLink(enemy)+' · 模拟结果</h3>'+
   '<p><b>总扣血量</b> '+estimate(result.damage)+' HP　 <b>预计击杀</b> '+estimate(result.kills)+'</p>'+
   '<p>'+fmt(result.seconds)+' 秒 · '+fmt(result.samples,0)+' 次试验。结果取各次试验的平均值，± 表示近似 95% 抽样误差。</p>'+areaNote+missing+
-  '<h3>基础掉落期望</h3>'+(dungeon?'<p class="muted">地下城击杀没有掉落。此处仅模拟所选怪物的重复交战。</p>':
-   drops.length?dataTable(['掉落','每次击杀期望','所选时长内期望'],drops):'<p class="muted">暂无基础掉落。</p>');
+  '<h3>掉落期望</h3><p><b>掉落物期望总价值</b> '+fmt(lootValue)+' 金币</p>'+
+  (dungeon?'<p class="muted">地下城击杀没有掉落，通关奖励单独结算。</p>':
+   drops.length?'<p class="muted">按所选时长内的预计击杀数计算，包含直接掉落的金币及物品出售价值。'+
+    (lootBonus?'已计入存档中可确认的掉落翻倍加成。':'')+'</p>'+
+    dataTable(['掉落','每次击杀期望','所选时长内期望'],drops):'<p class="muted">暂无基础掉落。</p>');
 }
 function startCombatSimulation(form){
  const status=$('combat-sim-status'),resultBox=$('combat-sim-result');
@@ -727,7 +732,7 @@ function startCombatSimulation(form){
  let request;
  try{request=readCombatSimulation(form);}
  catch(error){status.textContent=error.message;return;}
- const {enemy,dungeon,areaEffect,limits,input}=request;
+ const {enemy,dungeon,areaEffect,limits,lootBonus,input}=request;
  const start=$('combat-sim-start'),cancel=$('combat-sim-cancel');
  start.disabled=true;cancel.disabled=false;
  status.textContent='正在模拟 '+enemy.title+'…';
@@ -738,7 +743,7 @@ function startCombatSimulation(form){
   if(message.error||message.result){
    stopCombatSimulation();start.disabled=false;cancel.disabled=true;
    status.textContent=message.error||'模拟完成。';
-   if(message.result)resultBox.innerHTML=combatSimulationResults(enemy,dungeon,limits,message.result,areaEffect);
+   if(message.result)resultBox.innerHTML=combatSimulationResults(enemy,dungeon,limits,message.result,areaEffect,lootBonus);
   }else status.textContent='已完成 '+fmt(message.completed,0)+' / '+fmt(input.samples,0)+' 次模拟。';
  }
  const fallback=()=>{session.stop=runCombatBatches(combatKernel,input,receive,7);};
