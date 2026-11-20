@@ -209,17 +209,20 @@ function equippedSaveBoosts(save){
  return (save.equipment||[]).flatMap(id=>(boostByOwner.get('Item/'+shortId(id))||[])
   .filter(r=>r.path.startsWith('Capabilities.MelvorBase:Equipment.Bonuses.')&&unconditionalSaveBoost(r)).map(r=>({...r,times:1})));
 }
-function savedCombatLoot(save){
- const chances={ItemDoublingChance:0,BuriableDoublingChance:0,CurrencyDoublingChance:0};
- if(!save)return chances;
+function savedUnscopedCombatBonuses(save,component,type,totals){
+ if(!save)return totals;
  for(const {m,times} of [...playerBoostsCache(save),...equippedSaveBoosts(save)]){
   const ctx=m.LocalContext,stat=m.Stat?.Name;
-  if(m.Stat?.StatsType!==G.Namespace+':CombatLoot'||!(stat in chances)||ctx?.Component?.Entity!==G.Namespace+':Combat'||ctx.Component.Component!=='Loot')continue;
+  if(m.Stat?.StatsType!==G.Namespace+':'+type||!(stat in totals)||ctx?.Component?.Entity!==G.Namespace+':Combat'||ctx.Component.Component!==component)continue;
   if(Object.keys(ctx).some(k=>k!=='Component'&&ctx[k]!=null))continue;
   const experience=m.Scaling?.Data?.Experience;
   if(m.Scaling&&!experience)continue;
-  chances[stat]+=m.Value*times*(experience?saveLevel(shortId(experience.Entity),save):1);
+  totals[stat]+=m.Value*times*(experience?saveLevel(shortId(experience.Entity),save):1);
  }
+ return totals;
+}
+function savedCombatLoot(save){
+ const chances=savedUnscopedCombatBonuses(save,'Loot','CombatLoot',{ItemDoublingChance:0,BuriableDoublingChance:0,CurrencyDoublingChance:0});
  for(const k of Object.keys(chances))chances[k]=Math.min(1,Math.max(0,chances[k]));
  return chances;
 }

@@ -45,7 +45,7 @@ function createCombatKernel(){
   function summary(){
    const estimate=(sum,square)=>({mean:sum/completed,margin:completed>1?1.96*Math.sqrt(Math.max(0,(square-sum*sum/completed)/(completed-1)/completed)):0});
    const remaining=remainingSum/completed;
-   return {samples:completed,events,seed,seconds,kills:estimate(killSum,killSquare),damage:estimate(hpSum,hpSquare),
+   return {samples:completed,events,seconds,kills:estimate(killSum,killSquare),damage:estimate(hpSum,hpSquare),
     deathRate:deaths/completed,remaining,netLoss:player.hp-remaining};
   }
   function step(limit){
@@ -165,11 +165,19 @@ function enemyCombatCard(entry){
   '</div></details>';
 }
 
+const combatAreas=configEntries('Combat','Areas').filter(e=>e.type==='CombatArea'||e.type==='Dungeon').map(area=>{
+ const ids=(area.obj.Enemies||[]).flatMap(e=>area.type==='Dungeon'?(e.Enemies||[]).map(r=>r.Enemy):[e]);
+ return {area,enemies:[...new Set(ids)].map(id=>byKey.get('Enemy/'+shortId(id))).filter(Boolean)};
+}).filter(group=>group.enemies.length);
+const markedCombatEnemies=new Set(combatAreas.flatMap(group=>group.enemies));
+const unmarkedCombatEnemies=entries.filter(e=>e.type==='Enemy'&&!markedCombatEnemies.has(e));
+const simulationAreas=new Map(combatAreas.map(({area,enemies})=>[area.key,enemies]));
+if(unmarkedCombatEnemies.length)simulationAreas.set('unmarked',unmarkedCombatEnemies);
+
 function enemyAreaPage(){
  current='';updateList();
  const groups=[['CombatAreas','战斗区域'],['SlayerZones','屠杀者区域'],['DarkAreas','黑暗区域'],['Dungeons','地下城']];
- const sections=new Map(groups.map(([id])=>[id,[]])),seen=new Set(),loot=savedCombatLoot(playerSave);
- const list=entries.filter(e=>e.type==='Enemy');
+ const sections=new Map(groups.map(([id])=>[id,[]])),loot=savedCombatLoot(playerSave);
  function table(enemies,dungeon=false){
   const rows=enemies.map(e=>{
    const drops=dungeon?[]:combatDropRows(e.obj),value=combatDropValue(combatDropTotals(drops,loot));
@@ -181,20 +189,14 @@ function enemyAreaPage(){
   });
   return dataTable(['敌人','掉落物、数量与概率','单次击杀价值期望'+(playerSave?'（存档）':''),'战斗属性'],rows,undefined,'enemy-area-table');
  }
- for(const area of configEntries('Combat','Areas')){
-  if(area.type!=='CombatArea'&&area.type!=='Dungeon')continue;
+ for(const {area,enemies} of combatAreas){
   const dungeon=area.type==='Dungeon';
-  const ids=(area.obj.Enemies||[]).flatMap(e=>dungeon?(e.Enemies||[]).map(r=>r.Enemy):[e]);
-  const enemies=[...new Set(ids)].map(id=>byKey.get('Enemy/'+shortId(id))).filter(Boolean);
-  if(!enemies.length)continue;
   const group=dungeon?'Dungeons':shortId(area.obj.Category);
-  for(const enemy of enemies)seen.add(enemy.key);
   (sections.get(group)||sections.get('CombatAreas')).push('<h4>'+link(area)+'</h4>'+table(enemies,dungeon));
  }
- const other=list.filter(e=>!seen.has(e.key));
- if(other.length)sections.get('CombatAreas').push('<h4>未标注区域</h4>'+table(other));
+ if(unmarkedCombatEnemies.length)sections.get('CombatAreas').push('<h4>未标注区域</h4>'+table(unmarkedCombatEnemies));
  const summary=playerSave?'<p class="muted">存档已计入可确认的翻倍几率：物品 '+pct(loot.ItemDoublingChance)+'、可埋葬物额外 '+pct(loot.BuriableDoublingChance)+'、金币 '+pct(loot.CurrencyDoublingChance)+'。临时效果和屠杀任务等有条件的加成未计入。'+(!playerSave.equipment?'重新导入旧存档后可计入当前战斗装备。':'')+'</p>':'';
- $('detail').innerHTML='<h2>敌人</h2><p>'+list.length+' 个敌人。数量与概率按基础掉落规则列出。'+(playerSave?'存档翻倍计入价值期望。':'')+'单次击杀价值含直接掉落的金币与物品出售价格。</p>'+summary+
+ $('detail').innerHTML='<h2>敌人</h2><p>'+(markedCombatEnemies.size+unmarkedCombatEnemies.length)+' 个敌人。数量与概率按基础掉落规则列出。'+(playerSave?'存档翻倍计入价值期望。':'')+'单次击杀价值含直接掉落的金币与物品出售价格。</p>'+summary+
   '<div class="toc">'+groups.map(([id,title])=>'<button type="button" data-scroll="enemy-'+esc(id)+'">'+esc(title)+'</button>').join('')+'</div>'+
   groups.map(([id,title])=>'<section id="enemy-'+esc(id)+'"><h3>'+esc(title)+'</h3>'+(id==='Dungeons'?'<p class="muted">地下城中的击杀没有掉落，通关奖励见各地下城条目。</p>':'')+sections.get(id).join('')+'</section>').join('');
 }
@@ -349,27 +351,35 @@ function compileCombatEnemy(entry,player){
  return {profiles,limits:[...limits]};
 }
 
+function simulationEnemyOptions(area,selected){
+ return (simulationAreas.get(area)||[]).map(e=>'<option value="'+esc(e.key)+'"'+(e.key===selected?' selected':'')+'>'+esc(e.title+(e.title!==e.en?' · '+e.en:''))+'</option>').join('');
+}
+function combatSpawnSeconds(save){
+ const {FlatSpawnInterval,PercentSpawnInterval}=savedUnscopedCombatBonuses(save,'Action','CombatAction',{FlatSpawnInterval:0,PercentSpawnInterval:0});
+ // CombatActionComponent.OnDataLoaded uses 3000 ms; CombatActionStats applies percent before flat.
+ return Math.max(250,Math.trunc(3000*(1+PercentSpawnInterval)+FlatSpawnInterval))/1000;
+}
 function combatSimulatorPage(){
  stopCombatSimulation();
  const saveStats=savedCombatFields(playerSave),saved=saveStats?.fields;
- const setupNames=['enemy','seconds','spawn','samples','seed'];
+ const setupNames=['seconds','samples'];
  const previous=$('combat-sim-form')?.elements;
  const setup=previous&&setupNames.map(name=>previous.namedItem(name).value);
+ const area=previous?.namedItem('area').value||'CombatArea/GolbinForest';
+ const selectedEnemy=previous?.namedItem('enemy').value||'Enemy/Golbin';
  const choices=(type,selected)=>entries.filter(e=>e.type===type).map(e=>
   '<option value="'+esc(G.Namespace+':'+e.obj.Id)+'"'+(e.obj.Id===selected?' selected':'')+'>'+esc(e.title)+'</option>').join('');
  const field=(label,control)=>'<label><span>'+esc(label)+'</span>'+control+'</label>';
  const select=(label,name,options)=>field(label,'<select name="'+esc(name)+'">'+options+'</select>');
  const number=(label,name,value,min,max,step=1)=>field(label,'<input type="number" name="'+esc(name)+'" value="'+esc(saved?.[name]??value)+'" min="'+min+'" max="'+max+'" step="'+step+'" required>');
  const card=(label,fields)=>'<fieldset class="calcform combat-stat-card"><legend>'+esc(label)+'</legend>'+fields+'</fieldset>';
- const enemy=entries.filter(e=>e.type==='Enemy').sort((a,b)=>a.title.localeCompare(b.title,'zh-CN')).map(e=>
-  '<option value="'+esc(e.key)+'"'+(e.obj.Id==='Golbin'?' selected':'')+'>'+esc(e.title+(e.title!==e.en?' · '+e.en:''))+'</option>').join('');
+ const areas=[...simulationAreas.keys()].map(key=>'<option value="'+esc(key)+'"'+(key===area?' selected':'')+'>'+esc(byKey.get(key)?.title||'未标注区域')+'</option>').join('');
  const stances=(G.Objects.AttackStance||[]).map(s=>number(titleOf('AttackStance',s.Id),'evasion-'+s.Id,640,1,1000000)).join('');
  const ratings=(G.Objects.DamageType||[]).map(s=>number(titleOf('DamageType',s.Id)+'战力值','power-'+s.Id,63,1,1000000)+
   number(titleOf('DamageType',s.Id)+'防护值','protection-'+s.Id,0,0,1000000)).join('');
  $('detail').innerHTML='<h2>战斗模拟器</h2><p>每次试验从满血开始，击杀后等待重生，玩家死亡时结束。玩家使用普通攻击，可计入面板属性和生命偷取。食物、自动进食、玩家特殊攻击、区域效果、资源消耗和掉落加成超出当前模型范围。</p>'+
-  '<form id="combat-sim-form"><section><h3>怪物与模拟时长</h3><div class="combat-setup">'+select('怪物','enemy',enemy)+
-  number('模拟时长（秒）','seconds',60,.1,604800,'any')+number('出现与重生间隔（秒）','spawn',3,.25,60,'any')+
-  number('模拟次数','samples',1024,32,16384)+number('随机种子','seed',1,0,4294967295)+'</div></section>'+
+  '<form id="combat-sim-form"><section><h3>怪物与模拟时长</h3><div class="combat-setup">'+select('区域','area',areas)+select('怪物','enemy',simulationEnemyOptions(area,selectedEnemy))+
+  number('模拟时长（秒）','seconds',60,.1,604800,'any')+number('模拟次数','samples',1024,32,16384)+'</div></section>'+
   '<section><h3>战斗属性</h3><p>'+(saved?'已按存档中的等级、当前装备、姿态、法术和可确认的长期加成估算。可手动调整。祈祷、套装和临时效果未计入。'+
   (saveStats.missingSpell?' 存档未记录当前攻击法术，请核对元素和伤害。':''):playerSave?'请重新导入存档以自动填入战斗属性。':'可在顶栏导入存档，自动填入战斗属性。')+
   ' 模拟会按所选怪物计算战斗三角和元素克制。</p><div class="combat-stat-grid">'+
@@ -406,13 +416,13 @@ function readCombatSimulation(form){
   protection:getRatingRows('DamageType','protection-',0)
  };
  if(player.min>player.max)throw new Error('最低伤害不能高于最高伤害。');
- const enemy=byKey.get(value('enemy'));
- if(enemy?.type!=='Enemy')throw new Error('请选择一个怪物。');
+ const area=value('area'),enemy=simulationAreas.get(area)?.find(e=>e.key===value('enemy'));
+ if(!enemy)throw new Error('请选择该区域中的怪物。');
  const {profiles,limits}=compileCombatEnemy(enemy,player);
+ const dungeon=byKey.get(area)?.type==='Dungeon';
  const input={player,profiles,seconds:number('seconds',.1,604800,false,'模拟时长'),
-  spawnSeconds:number('spawn',.25,60,false,'重生间隔'),samples:number('samples',32,16384,true,'模拟次数'),
-  seed:number('seed',0,4294967295,true,'随机种子')};
- return {enemy,limits,input};
+  spawnSeconds:combatSpawnSeconds(playerSave),samples:number('samples',32,16384,true,'模拟次数'),seed:Date.now()};
+ return {enemy,dungeon,limits,input};
 }
 
 function runCombatBatches(kernel,input,send,chunkMs){
@@ -441,9 +451,9 @@ function stopCombatSimulation(){
  combatSimulation.stop?.();
  combatSimulation=null;
 }
-function combatSimulationResults(enemy,limits,result){
+function combatSimulationResults(enemy,dungeon,limits,result){
  const estimate=x=>fmt(x.mean)+' ± '+fmt(x.margin);
- const drops=combatDropExpectations(enemy.obj).map(([key,each])=>{
+ const drops=(dungeon?[]:combatDropExpectations(enemy.obj)).map(([key,each])=>{
   const entry=byKey.get(key),expected=result.kills.mean*each;
   return [cell(entry?.title||'—',eLink(entry)),cell(each),cell(expected)];
  }).sort((a,b)=>b[2].value-a[2].value);
@@ -451,8 +461,8 @@ function combatSimulationResults(enemy,limits,result){
  return '<h3>'+eLink(enemy)+' · 模拟结果</h3>'+missing+
   '<p><b>累计承伤</b> '+estimate(result.damage)+' HP　 <b>预计击杀</b> '+estimate(result.kills)+'　 <b>模拟死亡比例</b> '+pct(result.deathRate)+'</p>'+
   '<p>平均净失血 '+fmt(result.netLoss)+' HP，平均剩余生命 '+fmt(result.remaining)+' HP。</p>'+
-  '<p>'+fmt(result.seconds)+' 秒 · '+fmt(result.samples,0)+' 次试验 · 种子 '+fmt(result.seed,0)+'。± 为近似 95% 抽样误差，实际结果还受模型覆盖的机制影响。</p>'+
-  '<h3>基础掉落期望</h3>'+(drops.length?dataTable(['掉落','每次击杀期望','所选时长内期望'],drops):'<p class="muted">暂无基础掉落。</p>');
+  '<p>'+fmt(result.seconds)+' 秒 · '+fmt(result.samples,0)+' 次试验。± 为近似 95% 抽样误差，实际结果还受模型覆盖的机制影响。</p>'+
+  '<h3>基础掉落期望</h3>'+(dungeon?'<p class="muted">地下城击杀没有掉落。此处仅模拟所选怪物的重复交战。</p>':drops.length?dataTable(['掉落','每次击杀期望','所选时长内期望'],drops):'<p class="muted">暂无基础掉落。</p>');
 }
 function startCombatSimulation(form){
  const status=$('combat-sim-status'),resultBox=$('combat-sim-result');
@@ -461,7 +471,7 @@ function startCombatSimulation(form){
  let request;
  try{request=readCombatSimulation(form);}
  catch(error){status.textContent=error.message;return;}
- const {enemy,limits,input}=request;
+ const {enemy,dungeon,limits,input}=request;
  const start=$('combat-sim-start'),cancel=$('combat-sim-cancel');
  start.disabled=true;cancel.disabled=false;
  status.textContent='正在模拟 '+enemy.title+'…';
@@ -472,7 +482,7 @@ function startCombatSimulation(form){
   if(message.error||message.result){
    stopCombatSimulation();start.disabled=false;cancel.disabled=true;
    status.textContent=message.error||'模拟完成。';
-   if(message.result)resultBox.innerHTML=combatSimulationResults(enemy,limits,message.result);
+   if(message.result)resultBox.innerHTML=combatSimulationResults(enemy,dungeon,limits,message.result);
   }else status.textContent='已完成 '+fmt(message.completed,0)+' / '+fmt(input.samples,0)+' 次模拟。';
  }
  const fallback=()=>{session.stop=runCombatBatches(combatKernel,input,receive,7);};
@@ -497,6 +507,12 @@ $('detail').addEventListener('submit',event=>{
  if(event.target.id!=='combat-sim-form')return;
  event.preventDefault();
  startCombatSimulation(event.target);
+});
+$('detail').addEventListener('change',event=>{
+ const {name,value,form}=event.target;
+ if(name!=='area'||form?.id!=='combat-sim-form')return;
+ const enemy=form.elements.namedItem('enemy');
+ enemy.innerHTML=simulationEnemyOptions(value,enemy.value);
 });
 $('detail').addEventListener('click',event=>{
  if(event.target.id!=='combat-sim-cancel')return;

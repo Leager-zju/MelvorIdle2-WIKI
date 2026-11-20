@@ -14,10 +14,10 @@ for(const asset of new Set(Object.values(data.icons))){
  assert.ok(fs.statSync(path.join(output,asset)).size>0,asset);
 }
 const nodes = new Map();
-let detailChange;
+const detailChange=[];
 function element(id) {
   if (!nodes.has(id)) nodes.set(id, {value:'',innerHTML:'',textContent:'',dataset:{},hidden:true,classList:{toggle(){},remove(){}},
-    appendChild(){},addEventListener(type,fn){if(id==='detail'&&type==='change')detailChange=fn;},insertAdjacentHTML(pos,html){this.innerHTML+=html;},setAttribute(){},removeAttribute(){},
+    appendChild(){},addEventListener(type,fn){if(id==='detail'&&type==='change')detailChange.push(fn);},insertAdjacentHTML(pos,html){this.innerHTML+=html;},setAttribute(){},removeAttribute(){},
     querySelector(){return null;},querySelectorAll(){return [];},scrollTop:0});
   return nodes.get(id);
 }
@@ -194,6 +194,29 @@ const assertPlayerPage = () => {
 assert.match(element('wiki-nav').innerHTML,/#%40combat-simulator">战斗模拟器/);
 run('routePage("@combat-simulator")');
 const combatPageHtml=element('detail').innerHTML;
+const combatSetup=combatPageHtml.split('<div class="combat-setup">')[1].split('</div>')[0];
+assert.deepEqual([...combatSetup.matchAll(/name="([^"]+)"/g)].map(m=>m[1]),['area','enemy','seconds','samples']);
+assert.match(combatSetup,/<option value="CombatArea\/GolbinForest" selected>/);
+assert.match(combatSetup,/<option value="Enemy\/Golbin" selected>/);
+assert.doesNotMatch(combatSetup,/value="Enemy\/GreenSlime"/);
+assert.match(run('simulationEnemyOptions("CombatArea/SlimeForest")'),/value="Enemy\/GreenSlime"/);
+assert.match(run('simulationEnemyOptions("Dungeon/HobgolbinCamp")'),/value="Enemy\/GhelbaktheHobChief"/);
+assert.ok(run('entries.filter(e=>e.type==="Enemy").every(e=>[...simulationAreas.values()].some(group=>group.includes(e)))'));
+const areaEnemy={value:'Enemy/Golbin',innerHTML:''};
+const changedArea={name:'area',value:'CombatArea/SlimeForest',form:{id:'combat-sim-form',elements:{namedItem:()=>areaEnemy}}};
+detailChange.forEach(fn=>fn({target:changedArea}));
+assert.match(areaEnemy.innerHTML,/value="Enemy\/GreenSlime"/);
+assert.doesNotMatch(areaEnemy.innerHTML,/value="Enemy\/Golbin"/);
+const combatDefaults=Object.fromEntries([...combatPageHtml.matchAll(/name="([^"]+)" value="([^"]+)"/g)].map(m=>[m[1],m[2]]));
+Object.assign(combatDefaults,{area:'CombatArea/GolbinForest',enemy:'Enemy/Golbin',stance:'MelvorBase:Stab',element:'MelvorBase:Neutral',damageType:'MelvorBase:Normal'});
+context.COMBAT_FORM={elements:{namedItem:name=>({value:combatDefaults[name]})}};
+const beforeSeed=Date.now(),request=run('readCombatSimulation(COMBAT_FORM)');
+assert.ok(request.input.seed>=beforeSeed&&request.input.seed<=Date.now());
+assert.equal(request.input.spawnSeconds,3);
+combatDefaults.area='CombatArea/SlimeForest';
+assert.throws(()=>run('readCombatSimulation(COMBAT_FORM)'),/该区域/);
+combatDefaults.area='Dungeon/HobgolbinCamp';
+assert.equal(run('readCombatSimulation(COMBAT_FORM).dungeon'),true);
 assert.match(combatPageHtml,/<h2>战斗模拟器<\/h2>[^]*?name="seconds"[^]*?name="evasion-Stab"[^]*?name="power-Normal"[^]*?name="protection-Normal"/);
 assert.deepEqual([...combatPageHtml.matchAll(/<fieldset class="calcform combat-stat-card"><legend>([^<]+)<\/legend>/g)].map(m=>m[1]),
  ['进攻属性','躲避值','战力与防护','生命与护甲']);
@@ -364,6 +387,9 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
  assert.equal(run('savedCombatFields({...playerSave,combatStances:undefined})'),null);
  run('combatSimulatorPage()');
  const savedCombatHtml=element('detail').innerHTML;
+ const customSpawn=run(`combatSpawnSeconds({...playerSave, equipment:[...playerSave.equipment,'MelvorBase:GoldJadestoneRing'],
+  toolbelt:{...playerSave.toolbelt,Combat:{CombatUtility:{item:'MelvorBase:MonsterLure',qty:1}}}})`);
+ assert.equal(customSpawn,2.4);
  assert.match(savedCombatHtml,/已按存档中的等级/);
  assert.match(savedCombatHtml,/<option value="MelvorBase:Slash" selected>/);
  for(const [field,value] of Object.entries({interval:2.7,accuracy:840,max:26,hp:100,'power-Normal':56,'evasion-Stab':640})){
@@ -419,7 +445,7 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
  assert.deepEqual(savedValueCells.map(c=>c.value),[stats.value,stats.value*3600000/stats.ms]);
  assertPlayerPage();
  const hasRow=(markup,key)=>new RegExp('<tr><td[^>]*>(?:<img[^>]*>)?<a href="#'+encodeURIComponent(key)+'"').test(markup);
- const setHide=checked=>{detailChange({target:{id:'save-progress-hide',checked}});return element('save-progress-results').innerHTML;};
+ const setHide=checked=>{detailChange.forEach(fn=>fn({target:{id:'save-progress-hide',checked}}));return element('save-progress-results').innerHTML;};
  assert.match(element('detail').innerHTML,/隐藏已完成的任务/);
  assert.ok(hasRow(element('detail').innerHTML,'MasteryGuildTask/WoodcuttingTask1'));
  const tasks=setHide(true);
