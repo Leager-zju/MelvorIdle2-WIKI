@@ -212,6 +212,7 @@ Object.assign(combatDefaults,{area:'CombatArea/GolbinForest',enemy:'Enemy/Golbin
 context.COMBAT_FORM={elements:{namedItem:name=>({value:combatDefaults[name]})}};
 const beforeSeed=Date.now(),request=run('readCombatSimulation(COMBAT_FORM)');
 assert.ok(request.input.seed>=beforeSeed&&request.input.seed<=Date.now());
+assert.equal(request.input.seconds,3600);
 assert.equal(request.input.spawnSeconds,3);
 combatDefaults.area='CombatArea/SlimeForest';
 assert.throws(()=>run('readCombatSimulation(COMBAT_FORM)'),/该区域/);

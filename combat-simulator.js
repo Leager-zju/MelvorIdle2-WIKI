@@ -637,7 +637,7 @@ function combatSimulatorPage(){
   number(titleOf('DamageType',s.Id)+'防护值','protection-'+s.Id,0,0,1000000)).join('');
  $('detail').innerHTML='<h2>战斗模拟器</h2><p>每次试验累计完整模拟时长内受到的伤害。玩家使用普通攻击，击杀后等待怪物重生。计算会计入支持的敌人特殊攻击和区域效果，按导入存档中的商店购买记录判断区域免疫。</p>'+
   '<form id="combat-sim-form"><section><h3>怪物与模拟时长</h3><div class="combat-setup">'+select('区域','area',areas)+select('怪物','enemy',simulationEnemyOptions(area,selectedEnemy))+
-  number('模拟时长（秒）','seconds',60,.1,604800,'any')+number('模拟次数','samples',1024,32,16384)+'</div></section>'+
+  number('模拟时长（秒）','seconds',3600,.1,604800,'any')+number('模拟次数','samples',1024,32,16384)+'</div></section>'+
   '<section><h3>战斗属性</h3><p>'+(saved?'已按存档中的等级、当前装备、姿态、法术和可确认的长期加成估算。可手动调整。祈祷、套装和临时效果未计入。'+
   (saveStats.missingSpell?' 存档未记录当前攻击法术，请核对元素和伤害。':''):playerSave?'请重新导入存档以自动填入战斗属性。':'可在顶栏导入存档，自动填入战斗属性。')+
   ' 模拟会按所选怪物计算战斗三角和元素克制。</p><div class="combat-stat-grid">'+
