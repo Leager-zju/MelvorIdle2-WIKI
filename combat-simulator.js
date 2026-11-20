@@ -19,9 +19,9 @@ function createCombatKernel(){
  function createJob({player,profiles,seconds,spawnSeconds,samples,seed}){
   const end=Math.floor(seconds*tickRate),spawn=ticks(spawnSeconds*1000),playerInterval=ticks(player.interval);
   let state=seed>>>0,completed=0,events=0;
-  let damageSum=0,damageSquare=0;
+  let damageSum=0,damageSquare=0,killSum=0,killSquare=0;
   let enemyHp=0,ward=0,enemyWard=0,armour=0,enemyArmour=0;
-  let playerAt=0,enemyAt=0,spawnAt=spawn,profile,attack,hitIndex=0,trialDamage=0;
+  let playerAt=0,enemyAt=0,spawnAt=spawn,profile,attack,hitIndex=0,trialDamage=0,trialKills=0;
   function random(){
    state=(state+0x6D2B79F5)|0;
    let n=Math.imul(state^(state>>>15),state|1);
@@ -38,12 +38,16 @@ function createCombatKernel(){
   function finish(){
    completed++;
    damageSum+=trialDamage;damageSquare+=trialDamage*trialDamage;
-   trialDamage=0;spawnAt=spawn;
+   killSum+=trialKills;killSquare+=trialKills*trialKills;
+   trialDamage=0;trialKills=0;spawnAt=spawn;
   }
   function summary(){
-   const mean=damageSum/completed;
-   const margin=completed>1?1.96*Math.sqrt(Math.max(0,(damageSquare-damageSum*mean)/(completed-1)/completed)):0;
-   return {samples:completed,seconds,damage:{mean,margin}};
+   const estimate=(sum,square)=>{
+    const mean=sum/completed;
+    const margin=completed>1?1.96*Math.sqrt(Math.max(0,(square-sum*mean)/(completed-1)/completed)):0;
+    return {mean,margin};
+   };
+   return {samples:completed,seconds,damage:estimate(damageSum,damageSquare),kills:estimate(killSum,killSquare)};
   }
   function step(limit){
    while(completed<samples&&limit-->0){
@@ -92,7 +96,7 @@ function createCombatKernel(){
       enemyAt+=profile.interval;attack=weighted(profile.attacks);hitIndex=0;
      }else enemyAt+=attack.hits[hitIndex].wait-(hitIndex===1?1:0);
     }
-    if(!enemyHp)spawnAt=tick+spawn;
+    if(!enemyHp){trialKills++;spawnAt=tick+spawn;}
    }
    return completed===samples;
   }
@@ -412,7 +416,7 @@ function readCombatSimulation(form){
  const {profiles,limits}=compileCombatEnemy(enemy,player);
  const input={player,profiles,seconds:number('seconds',.1,604800,false,'模拟时长'),
   spawnSeconds:combatSpawnSeconds(playerSave),samples:number('samples',32,16384,true,'模拟次数'),seed:Date.now()};
- return {enemy,limits,input};
+ return {enemy,dungeon:byKey.get(area)?.type==='Dungeon',limits,input};
 }
 
 function runCombatBatches(kernel,input,send,chunkMs){
@@ -441,11 +445,18 @@ function stopCombatSimulation(){
  combatSimulation.stop?.();
  combatSimulation=null;
 }
-function combatSimulationResults(enemy,limits,result){
- const missing=limits.length?'<p class="note">以下机制未计入扣血量：'+esc(limits.join('、'))+'。</p>':'';
+function combatSimulationResults(enemy,dungeon,limits,result){
+ const estimate=x=>fmt(x.mean)+' ± '+fmt(x.margin);
+ const drops=(dungeon?[]:combatDropExpectations(enemy.obj)).map(([key,each])=>{
+  const entry=byKey.get(key),expected=result.kills.mean*each;
+  return [cell(entry?.title||'—',eLink(entry)),cell(each),cell(expected)];
+ }).sort((a,b)=>b[2].value-a[2].value);
+ const missing=limits.length?'<p class="note">以下机制未计入结果：'+esc(limits.join('、'))+'。</p>':'';
  return '<h3>'+eLink(enemy)+' · 模拟结果</h3>'+
-  '<p><b>总扣血量</b> '+fmt(result.damage.mean)+' ± '+fmt(result.damage.margin)+' HP</p>'+
-  '<p>'+fmt(result.seconds)+' 秒 · '+fmt(result.samples,0)+' 次试验。结果取各次试验的平均值，± 表示近似 95% 抽样误差。</p>'+missing;
+  '<p><b>总扣血量</b> '+estimate(result.damage)+' HP　 <b>预计击杀</b> '+estimate(result.kills)+'</p>'+
+  '<p>'+fmt(result.seconds)+' 秒 · '+fmt(result.samples,0)+' 次试验。结果取各次试验的平均值，± 表示近似 95% 抽样误差。</p>'+missing+
+  '<h3>基础掉落期望</h3>'+(dungeon?'<p class="muted">地下城击杀没有掉落。此处仅模拟所选怪物的重复交战。</p>':
+   drops.length?dataTable(['掉落','每次击杀期望','所选时长内期望'],drops):'<p class="muted">暂无基础掉落。</p>');
 }
 function startCombatSimulation(form){
  const status=$('combat-sim-status'),resultBox=$('combat-sim-result');
@@ -454,7 +465,7 @@ function startCombatSimulation(form){
  let request;
  try{request=readCombatSimulation(form);}
  catch(error){status.textContent=error.message;return;}
- const {enemy,limits,input}=request;
+ const {enemy,dungeon,limits,input}=request;
  const start=$('combat-sim-start'),cancel=$('combat-sim-cancel');
  start.disabled=true;cancel.disabled=false;
  status.textContent='正在模拟 '+enemy.title+'…';
@@ -465,7 +476,7 @@ function startCombatSimulation(form){
   if(message.error||message.result){
    stopCombatSimulation();start.disabled=false;cancel.disabled=true;
    status.textContent=message.error||'模拟完成。';
-   if(message.result)resultBox.innerHTML=combatSimulationResults(enemy,limits,message.result);
+   if(message.result)resultBox.innerHTML=combatSimulationResults(enemy,dungeon,limits,message.result);
   }else status.textContent='已完成 '+fmt(message.completed,0)+' / '+fmt(input.samples,0)+' 次模拟。';
  }
  const fallback=()=>{session.stop=runCombatBatches(combatKernel,input,receive,7);};

@@ -216,7 +216,7 @@ assert.equal(request.input.spawnSeconds,3);
 combatDefaults.area='CombatArea/SlimeForest';
 assert.throws(()=>run('readCombatSimulation(COMBAT_FORM)'),/该区域/);
 combatDefaults.area='Dungeon/HobgolbinCamp';
-assert.equal(run('readCombatSimulation(COMBAT_FORM).enemy.key'),'Enemy/Golbin');
+assert.equal(run('readCombatSimulation(COMBAT_FORM).dungeon'),true);
 assert.doesNotMatch(combatPageHtml,/name="(?:hp|lifesteal)"/);
 assert.match(combatPageHtml,/<h2>战斗模拟器<\/h2>[^]*?name="seconds"[^]*?name="evasion-Stab"[^]*?name="power-Normal"[^]*?name="protection-Normal"/);
 assert.deepEqual([...combatPageHtml.matchAll(/<fieldset class="calcform combat-stat-card"><legend>([^<]+)<\/legend>/g)].map(m=>m[1]),
@@ -245,7 +245,9 @@ const combatRun=overrides=>JSON.parse(run(`(()=>{
 assert.deepEqual(combatRun('').damage,{mean:0,margin:0});
 const simultaneous='input.profiles[0].interval=60;';
 assert.equal(combatRun(simultaneous+'input.seconds=3.99;').damage.mean,0);
-assert.deepEqual(combatRun(simultaneous).damage,{mean:20,margin:0});
+const fullDuration=combatRun(simultaneous);
+assert.deepEqual(fullDuration.damage,{mean:20,margin:0});
+assert.deepEqual(fullDuration.kills,{mean:2,margin:0});
 assert.equal(combatRun(simultaneous+'input.profiles[0].playerHit=0;').damage.mean,50);
 assert.equal(combatRun(simultaneous+'input.profiles[0].playerHit=0;input.player.ward=2;input.player.armour=3;').damage.mean,30);
 const multiHit=combatRun('input.seconds=5.3; input.player.interval=60000; input.profiles[0].interval=60; input.profiles[0].attacks[0].hits.push({damage:[[0,5,5]],wait:16});');
@@ -261,9 +263,11 @@ const soulrip=run(`compileCombatEnemy({
  obj:{...byKey.get('Enemy/Golbin').obj,Attacks:[{Attack:'MelvorBase:Soulrip',Chance:1}]}
 },${combatPlayer})`);
 assert.ok(soulrip.limits.some(text=>text.startsWith('按玩家生命值计算的伤害 ')));
-const damageResult=run('combatSimulationResults(byKey.get("Enemy/Golbin"),[],{seconds:8,samples:32,damage:{mean:50,margin:0}})');
-assert.match(damageResult,/总扣血量<\/b> 50 ± 0 HP/);
-assert.doesNotMatch(damageResult,/死亡比例|剩余生命|预计击杀|掉落期望/);
+const resultMarkup=dungeon=>run('combatSimulationResults(byKey.get("Enemy/Golbin"),'+dungeon+',[],{seconds:8,samples:32,damage:{mean:20,margin:0},kills:{mean:2,margin:0}})');
+assert.match(resultMarkup(false),/总扣血量<\/b> 20 ± 0 HP[^]*预计击杀<\/b> 2 ± 0[^]*基础掉落期望[^]*Item%2FStoneSword/);
+assert.doesNotMatch(resultMarkup(false),/死亡比例|剩余生命/);
+assert.match(resultMarkup(true),/地下城击杀没有掉落/);
+assert.doesNotMatch(resultMarkup(true),/Item%2FStoneSword/);
 assert.ok(run(`entries.filter(e=>e.type==='Enemy').every(e=>compileCombatEnemy(e,${combatPlayer}).profiles.every(p=>
  p.hp>0&&p.interval>0&&p.attacks.length&&p.attacks.every(a=>Number.isFinite(a.factor))))`));
 assert.equal(run(`Object.fromEntries(combatDropExpectations({Drops:{
@@ -370,7 +374,8 @@ for(const page of ['showSkill("Hunting")','browse("HuntingAnimal")']){
  context.SAVE_FILE=new Uint8Array(packed);
  assert.deepEqual(JSON.parse(run('JSON.stringify(parseSave(decompressSave(SAVE_FILE)))')),save);
  assert.throws(()=>run('decompressSave(new Uint8Array([1,2,3]))'),/解压失败/);
- assert.equal(element('save-dir').textContent,'%APPDATA%\\Games By Malcs\\Melvor Idle 2\\steam');// matches the Steam save folder
+ assert.match(html,/<input id="save-dir" type="text" readonly aria-describedby="save-hint">/);
+ assert.equal(element('save-dir').value,'%APPDATA%\\Games By Malcs\\Melvor Idle 2\\steam');// matches the Steam save folder
  assert.equal(save.version,31);assert.equal(save.character,'Tester');assert.equal(save.totalLevel,321);
  assert.equal(save.toolbelt.Woodcutting[ns+'WoodcuttingTool'].item,ns+'ReinforcedWoodcuttersAxe');
  assert.deepEqual(save.equipment,[ns+'GoldTopazAmulet',ns+'GoldTopazRing',ns+'StoneSword']);

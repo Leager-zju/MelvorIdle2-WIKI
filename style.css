@@ -188,7 +188,7 @@ details.enemy-combat{display:flow-root;border:1px solid var(--line);padding:4px 
 .save-panel h2{font-size:16px;margin:8px 0 4px}
 .save-panel p{font-size:13px;color:var(--muted);margin:4px 0 10px}
 .save-panel label{display:block;font-size:12px;margin-bottom:4px}
-.save-panel code{overflow-wrap:anywhere;user-select:all;color:var(--text)}
+.save-panel #save-dir{width:100%;font:12px/1.4 Consolas,monospace}
 .save-panel textarea{width:100%;font:12px/1.4 Consolas,monospace;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:8px;resize:vertical}
 .save-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
 #save-status{font-size:13px;color:var(--muted)}

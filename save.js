@@ -402,7 +402,7 @@ function updateSaveControls(message){
  $('save-status').textContent=message||saveStatusText();
  $('save-clear').hidden=!playerSave;
 }
-function toggleSavePanel(open=$('save-panel').hidden){$('save-panel').hidden=!open;$('save-toggle').setAttribute('aria-expanded',String(open));if(open)$('save-text').focus?.();}
+function toggleSavePanel(open=$('save-panel').hidden){$('save-panel').hidden=!open;$('save-toggle').setAttribute('aria-expanded',String(open));if(open)$('save-pick').focus?.();}
 restorePlayerSave();
 $('save-toggle').addEventListener('click',()=>toggleSavePanel());
 async function importSave(read){
@@ -412,11 +412,12 @@ async function importSave(read){
 $('save-import').addEventListener('click',()=>importSave(()=>decodeSaveString($('save-text').value)));
 // Browsers can't open the file dialog in a given folder, so copy the folder path for the dialog's address bar.
 const SAVE_DIR='%APPDATA%\\Games By Malcs\\Melvor Idle 2\\steam';
-$('save-dir').textContent=SAVE_DIR;
+$('save-dir').value=SAVE_DIR;
+for(const type of ['focus','click'])$('save-dir').addEventListener(type,event=>event.target.select());
 $('save-pick').addEventListener('click',()=>{
  // Start both inside the click: each needs the user's gesture, and awaiting the copy could get the dialog blocked.
  let copy;try{copy=navigator.clipboard.writeText(SAVE_DIR);}catch(error){copy=Promise.reject(error);}
- copy.then(()=>updateSaveControls('已复制存档目录：在弹出窗口的地址栏按 Ctrl+V 再回车。'),()=>updateSaveControls('无法自动复制，请手动复制上方路径到弹出窗口的地址栏。'));
+ copy.then(()=>updateSaveControls('已复制存档目录。在文件窗口按 Alt+D、Ctrl+V、回车。'),()=>updateSaveControls('无法自动复制。选中上方目录后按 Ctrl+C，再粘贴到文件窗口的地址栏。'));
  $('save-file').click();
 });
 $('save-file').addEventListener('change',event=>{const file=event.target.files[0];event.target.value='';if(file)importSave(async()=>decompressSave(new Uint8Array(await file.arrayBuffer())));});
